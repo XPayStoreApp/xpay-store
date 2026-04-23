@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, productsTable } from "@workspace/db";
+import { db, ordersTable, productsTable, providersTable } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import {
   CreateOrderBody,
   CreateOrderResponse,
@@ -9,6 +10,7 @@ import {
   ListMyOrdersResponse,
 } from "@workspace/api-zod";
 import { getOrCreateCurrentUser } from "../lib/currentUser.js";
+import { getAdapter } from "../lib/adapter-registry";
 
 const router: IRouter = Router();
 
@@ -90,9 +92,76 @@ router.post("/orders", async (req, res) => {
     res.status(404).json({ error: "product_not_found" });
     return;
   }
-  const totalUsd = Number(product.priceUsd) * body.quantity;
+
+  let providerOrderResult: {
+    success: boolean;
+    providerOrderId?: string;
+    status?: string;
+    price?: number;
+    rawResponse?: any;
+    replayApi?: any[];
+    error?: string;
+  } | null = null;
+
+  // --- تكامل المزود الخارجي ---
+  if (product.providerId) {
+    const [provider] = await db
+      .select()
+      .from(providersTable)
+      .where(eq(providersTable.id, product.providerId))
+      .limit(1);
+
+    if (!provider) {
+      res.status(400).json({ error: "المزود غير موجود" });
+      return;
+    }
+
+    const adapter = getAdapter(provider.providerType || "custom");
+    if (!adapter) {
+      res.status(400).json({ error: "نوع المزود غير مدعوم" });
+      return;
+    }
+
+    const orderUuid = randomUUID();
+    const playerId = body.userIdentifier || `user_${user.id}`;
+
+    try {
+      providerOrderResult = await adapter.placeOrder(
+        provider.apiKey!,
+        provider.apiUrl || undefined,
+        product.providerProductId!,
+        body.quantity,
+        playerId,
+        orderUuid
+      );
+    } catch (error: any) {
+      console.error("🔥 Provider order error:", error);
+      // نستمر بإنشاء الطلب المحلي بحالة wait مع تسجيل الخطأ
+      providerOrderResult = {
+        success: false,
+        error: error.message || "فشل الاتصال بالمزود",
+      };
+    }
+  }
+  // --------------------------
+
+  const totalUsd = providerOrderResult?.price
+    ? providerOrderResult.price
+    : Number(product.priceUsd) * body.quantity;
   const totalSyp = Number(product.priceSyp) * body.quantity;
   const orderNumber = `XP-${Date.now().toString().slice(-8)}`;
+
+  const meta: any = {};
+  if (providerOrderResult) {
+    meta.provider = {
+      providerOrderId: providerOrderResult.providerOrderId,
+      status: providerOrderResult.status,
+      rawResponse: providerOrderResult.rawResponse,
+      replayApi: providerOrderResult.replayApi,
+      error: providerOrderResult.error,
+    };
+  }
+
   const inserted = await db
     .insert(ordersTable)
     .values({
@@ -103,9 +172,11 @@ router.post("/orders", async (req, res) => {
       userIdentifier: body.userIdentifier ?? null,
       totalUsd: String(totalUsd),
       totalSyp: String(totalSyp),
-      status: "wait",
+      status: providerOrderResult?.status || "wait",
+      meta,
     })
     .returning();
+
   const o = inserted[0]!;
   res.json(CreateOrderResponse.parse(rowToOrder(o, product)));
 });
