@@ -285,6 +285,26 @@ makeCrud("social-links", socialLinksTable, {
   allowedFields: ["platform", "url", "label", "order"],
 });
 
+// Cascade delete للمزودين: حذف المنتجات المرتبطة ثم حذف المزود
+router.delete("/admin/providers/:id", requireAdmin, async (req, res) => {
+  const providerId = Number(req.params.id);
+  
+  // حذف جميع المنتجات المرتبطة بهذا المزود
+  await db.execute(sql`DELETE FROM products WHERE provider_id = ${providerId}`);
+  
+  // حذف المزود نفسه
+  await db.delete(providersTable).where(eq(providersTable.id, providerId));
+  
+  await logActivity(
+    { id: req.session.adminId, name: req.session.adminUsername },
+    "delete",
+    "providers",
+    { id: providerId, cascade: true }
+  );
+  
+  res.json({ ok: true });
+});
+
 makeCrud("providers", providersTable, {
   orderBy: providersTable.priority,
   allowedFields: ["name", "apiUrl", "apiKey", "notes", "priority", "active", "providerType"],
