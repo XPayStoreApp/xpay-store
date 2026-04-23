@@ -943,19 +943,18 @@ router.post("/admin/bulk-delete", requireAdmin, async (req, res) => {
     return;
   }
 
-  // تنفيذ الحذف المتسلسل حسب المورد
   try {
+    // تنفيذ الحذف المتسلسل حسب المورد
     if (resource === "categories") {
-      for (const id of ids) {
-        await db.execute(sql`DELETE FROM products WHERE category_id = ${id}`);
-      }
+      // حذف المنتجات المرتبطة بكل فئة
+      await db.execute(sql`DELETE FROM products WHERE category_id = ANY(${ids}::int[])`);
     } else if (resource === "providers") {
-      for (const id of ids) {
-        await db.execute(sql`DELETE FROM products WHERE provider_id = ${id}`);
-      }
+      // حذف المنتجات المرتبطة بكل مزود
+      await db.execute(sql`DELETE FROM products WHERE provider_id = ANY(${ids}::int[])`);
     }
 
-    await db.delete(table).where(sql`${table.id} = ANY(${ids})`);
+    // حذف العناصر نفسها باستخدام sql template مباشر
+    await db.execute(sql`DELETE FROM ${table} WHERE id = ANY(${ids}::int[])`);
 
     await logActivity(
       { id: req.session.adminId, name: req.session.adminUsername },
@@ -970,7 +969,6 @@ router.post("/admin/bulk-delete", requireAdmin, async (req, res) => {
     res.status(500).json({ error: error.message || "فشل الحذف الجماعي" });
   }
 });
-
 
 // ========== NOTIFICATIONS DELETE ==========
 router.delete("/admin/notifications/:id", requireAdmin, async (req, res) => {
