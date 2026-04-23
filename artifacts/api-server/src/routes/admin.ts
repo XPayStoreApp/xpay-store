@@ -233,6 +233,27 @@ function filterFields(body: any, allowed?: string[]): any {
 }
 
 // ========== RESOURCES ==========
+// Cascade delete للفئات: حذف المنتجات المرتبطة ثم حذف الفئة
+router.delete("/admin/categories/:id", requireAdmin, async (req, res) => {
+  const categoryId = Number(req.params.id);
+  
+  // حذف جميع المنتجات المرتبطة بهذه الفئة
+  await db.execute(sql`DELETE FROM products WHERE category_id = ${categoryId}`);
+  
+  // حذف الفئة نفسها
+  await db.delete(categoriesTable).where(eq(categoriesTable.id, categoryId));
+  
+  await logActivity(
+    { id: req.session.adminId, name: req.session.adminUsername },
+    "delete",
+    "categories",
+    { id: categoryId, cascade: true }
+  );
+  
+  res.json({ ok: true });
+});
+
+
 makeCrud("categories", categoriesTable, {
   orderBy: categoriesTable.order,
   allowedFields: ["name", "image", "order", "active"],
