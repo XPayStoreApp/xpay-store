@@ -1,0 +1,9 @@
+﻿{
+  "framework": "vite",
+  "buildCommand": "pnpm --filter \"@workspace/xpay-store\" run build",
+  "outputDirectory": "artifacts/xpay-store/dist/public",
+  "installCommand": "pnpm install",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
