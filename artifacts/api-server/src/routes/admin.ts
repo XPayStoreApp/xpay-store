@@ -23,9 +23,8 @@ import {
 } from "@workspace/db";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { requireAdmin } from "../lib/adminAuth.js";
-import { getAdapter } from "../lib/adapter-registry";
+import { getAdapter } from "../lib/adapter-registry"; 
 import { MersalAdapter } from "../lib/mersal-adapter";
-
 const router: IRouter = Router();
 
 async function logActivity(
@@ -166,7 +165,7 @@ router.get("/admin/dashboard", requireAdmin, async (_req, res) => {
     },
     recentOrders,
     recentDeposits,
-    chart: chart.rows,
+    chart: chart.rows as any[], // Fix: cast to any[]
   });
 });
 
@@ -190,7 +189,7 @@ function makeCrud<T extends { id: any }>(
   });
   router.post(`/admin/${path}`, requireAdmin, async (req, res) => {
     const data = filterFields(req.body, opts.allowedFields);
-    const [row] = await db.insert(table).values(data).returning();
+    const [row] = (await db.insert(table).values(data).returning()) as any[];
     await logActivity(
       { id: req.session.adminId, name: req.session.adminUsername },
       "create",
@@ -584,7 +583,7 @@ router.get("/admin/reports/sales", requireAdmin, async (_req, res) => {
     GROUP BY date_trunc('day', created_at)
     ORDER BY date_trunc('day', created_at) DESC
   `);
-  res.json(rows.rows);
+  res.json((rows.rows as any[]) || []);
 });
 
 router.get("/admin/reports/profit-log", requireAdmin, async (_req, res) => {
@@ -597,7 +596,7 @@ router.get("/admin/reports/profit-log", requireAdmin, async (_req, res) => {
     ORDER BY date_trunc('day', created_at) DESC
     LIMIT 90
   `);
-  res.json(rows.rows);
+  res.json((rows.rows as any[]) || []);
 });
 
 // ========== BACKUP (mock) ==========
@@ -894,7 +893,7 @@ router.get("/admin/reports", requireAdmin, async (req, res) => {
     ORDER BY date_trunc('day', created_at) DESC
     LIMIT 90
   `);
-  const [tot] = (await db.execute(sql`
+  const totResult = await db.execute(sql`
     SELECT
       coalesce(sum(total_usd) filter (where status='accept'), 0)::float as "totalSalesUsd",
       coalesce(sum(total_usd - cost_usd) filter (where status='accept'), 0)::float as "totalProfitUsd",
@@ -902,15 +901,19 @@ router.get("/admin/reports", requireAdmin, async (req, res) => {
     FROM orders
     WHERE (${from}::date IS NULL OR created_at::date >= ${from}::date)
       AND (${to}::date IS NULL OR created_at::date <= ${to}::date)
-  `)).rows as any[];
-  const [dep] = (await db.execute(sql`
+  `);
+  const totRows = totResult.rows as any[];
+  const [tot] = totRows;
+  const depResult = await db.execute(sql`
     SELECT coalesce(sum(amount_usd) filter (where status='approved'), 0)::float as "totalDepositsUsd"
     FROM deposits
     WHERE (${from}::date IS NULL OR created_at::date >= ${from}::date)
       AND (${to}::date IS NULL OR created_at::date <= ${to}::date)
-  `)).rows as any[];
+  `);
+  const depRows = depResult.rows as any[];
+  const [dep] = depRows;
   res.json({
-    daily: dailyRows.rows,
+    daily: (dailyRows.rows as any[]) || [],
     totalSalesUsd: tot?.totalSalesUsd || 0,
     totalProfitUsd: tot?.totalProfitUsd || 0,
     orderCount: tot?.orderCount || 0,
@@ -968,11 +971,11 @@ router.post("/admin/import", requireAdmin, async (req, res) => {
   };
   for (const [k, table] of Object.entries(tableMap)) {
     const rows = body[k];
-    if (Array.isArray(rows) && rows.length) {
+    if (Array.isArray(rows) && rows.length > 0) {
       try {
         const stripped = rows.map(({ id, ...rest }: any) => rest);
         const result = await db.insert(table).values(stripped).onConflictDoNothing().returning();
-        imported += result.length;
+        imported += (result as any[]).length;
       } catch {
         // continue silently for invalid rows
       }
@@ -1006,7 +1009,7 @@ router.put("/admin/settings/items", requireAdmin, async (req, res) => {
       .onConflictDoUpdate({ target: settingsTable.key, set: { value: it.value } });
   }
   res.json({ ok: true });
-});
+}); 
 
 // ========== PROVIDER SYNC (NEW) ==========
 router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
@@ -1034,6 +1037,7 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
     let updated = 0;
 
     for (const p of products) {
+      // 1. إدارة الفئات (Drizzle لا يسبب مشاكل هنا)
       let categoryId: number | undefined;
       const [existingCat] = await db
         .select()
@@ -1058,37 +1062,50 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
 
       if (!categoryId) continue;
 
-      const [existingProd] = await db
-        .select()
-        .from(productsTable)
-        .where(eq(productsTable.providerProductId, Number(p.id)))
-        .limit(1);
+      // 2. عمليات المنتجات: كليًا عبر SQL خام (لا نستخدم productsTable هنا)
+      const existingProdResult = await db.execute(sql`
+        SELECT id FROM products 
+        WHERE provider_product_id = ${Number(p.id)} 
+        LIMIT 1
+      `);
+      const existingProdId = (existingProdResult.rows as any[])[0]?.id || null;
 
-      const productData = {
-        categoryId,
-        providerId,
-        providerProductId: Number(p.id),
-        name: p.name,
-        image: p.categoryImage || "/cat-cards.png",
-        priceUsd: String(p.price),
-        priceSyp: "0",
-        basePriceUsd: p.basePrice ? String(p.basePrice) : null,
-        productType: p.productType as "amount" | "package",
-        available: p.available,
-        minQty: p.minQty ? String(p.minQty) : null,
-        maxQty: p.maxQty ? String(p.maxQty) : null,
-        description: p.description || null,
-        source: "provider",
-      };
-
-      if (existingProd) {
-        await db
-          .update(productsTable)
-          .set(productData)
-          .where(eq(productsTable.id, existingProd.id));
+      if (existingProdId) {
+        // تحديث منتج موجود
+        await db.execute(sql`
+          UPDATE products SET
+            category_id = ${categoryId},
+            provider_id = ${providerId},
+            name = ${p.name},
+            image = ${p.categoryImage || "/cat-cards.png"},
+            price_usd = ${String(p.price)},
+            price_syp = '0',
+            base_price_usd = ${p.basePrice ? String(p.basePrice) : null},
+            product_type = ${p.productType},
+            available = ${p.available},
+            min_qty = ${p.minQty ? String(p.minQty) : null},
+            max_qty = ${p.maxQty ? String(p.maxQty) : null},
+            description = ${p.description || null},
+            source = 'provider'
+          WHERE id = ${existingProdId}
+        `);
         updated++;
       } else {
-        await db.insert(productsTable).values(productData);
+        // إدراج منتج جديد
+        await db.execute(sql`
+          INSERT INTO products (
+            category_id, provider_id, provider_product_id, name, image,
+            price_usd, price_syp, base_price_usd, product_type, available,
+            min_qty, max_qty, description, source
+          ) VALUES (
+            ${categoryId}, ${providerId}, ${Number(p.id)}, ${p.name},
+            ${p.categoryImage || "/cat-cards.png"}, ${String(p.price)}, '0',
+            ${p.basePrice ? String(p.basePrice) : null}, ${p.productType},
+            ${p.available}, ${p.minQty ? String(p.minQty) : null},
+            ${p.maxQty ? String(p.maxQty) : null}, ${p.description || null},
+            'provider'
+          )
+        `);
         imported++;
       }
     }
@@ -1111,5 +1128,3 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
     res.status(500).json({ error: error.message || "فشلت المزامنة" });
   }
 });
-
-export default router;
