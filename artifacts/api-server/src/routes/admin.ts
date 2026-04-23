@@ -1114,7 +1114,7 @@ router.put("/admin/settings/items", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 }); 
 
-// ========== PROVIDER SYNC (NEW) ==========
+// ========== PROVIDER SYNC (UPDATED – لا يضيف منتجات جديدة) ==========
 router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
   const providerId = Number(req.params.id);
   const [provider] = await db
@@ -1136,36 +1136,10 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
       provider.apiUrl || undefined
     );
 
-    let imported = 0;
     let updated = 0;
 
     for (const p of products) {
-      // 1. إدارة الفئات (Drizzle لا يسبب مشاكل هنا)
-      let categoryId: number | undefined;
-      const [existingCat] = await db
-        .select()
-        .from(categoriesTable)
-        .where(eq(categoriesTable.name, p.categoryName))
-        .limit(1);
-
-      if (existingCat) {
-        categoryId = existingCat.id;
-      } else {
-        const [newCat] = await db
-          .insert(categoriesTable)
-          .values({
-            name: p.categoryName,
-            image: p.categoryImage || "/cat-cards.png",
-            order: 0,
-            active: p.available,
-          })
-          .returning();
-        categoryId = newCat.id;
-      }
-
-      if (!categoryId) continue;
-
-      // 2. عمليات المنتجات: كليًا عبر SQL خام (لا نستخدم productsTable هنا)
+      // البحث عن منتج موجود مسبقاً بنفس provider_product_id
       const existingProdResult = await db.execute(sql`
         SELECT id FROM products 
         WHERE provider_product_id = ${Number(p.id)} 
@@ -1173,12 +1147,10 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
       `);
       const existingProdId = (existingProdResult.rows as any[])[0]?.id || null;
 
+      // تحديث المنتج الموجود فقط – لا نقوم بإدراج جديد
       if (existingProdId) {
-        // تحديث منتج موجود
         await db.execute(sql`
           UPDATE products SET
-            category_id = ${categoryId},
-            provider_id = ${providerId},
             name = ${p.name},
             image = ${p.categoryImage || "/cat-cards.png"},
             price_usd = ${String(p.price)},
@@ -1193,37 +1165,20 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
           WHERE id = ${existingProdId}
         `);
         updated++;
-      } else {
-        // إدراج منتج جديد
-        await db.execute(sql`
-          INSERT INTO products (
-            category_id, provider_id, provider_product_id, name, image,
-            price_usd, price_syp, base_price_usd, product_type, available,
-            min_qty, max_qty, description, source
-          ) VALUES (
-            ${categoryId}, ${providerId}, ${Number(p.id)}, ${p.name},
-            ${p.categoryImage || "/cat-cards.png"}, ${String(p.price)}, '0',
-            ${p.basePrice ? String(p.basePrice) : null}, ${p.productType},
-            ${p.available}, ${p.minQty ? String(p.minQty) : null},
-            ${p.maxQty ? String(p.maxQty) : null}, ${p.description || null},
-            'provider'
-          )
-        `);
-        imported++;
       }
+      // تمت إزالة كتلة else الخاصة بالإدراج
     }
 
     await logActivity(
       { id: req.session.adminId, name: req.session.adminUsername },
       "sync_provider",
       `provider_${providerId}`,
-      { imported, updated }
+      { updated }
     );
 
     res.json({
       ok: true,
-      message: `✅ تمت المزامنة: ${imported} منتج جديد، ${updated} منتج محدث`,
-      imported,
+      message: `✅ تم تحديث ${updated} منتج مرتبط`,
       updated,
     });
   } catch (error: any) {
