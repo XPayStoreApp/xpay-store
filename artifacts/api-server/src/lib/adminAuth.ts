@@ -15,7 +15,8 @@ export const sessionMiddleware: RequestHandler = session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production", // true في Render
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: 1000 * 60 * 60 * 24 * 7,
   },
 });
