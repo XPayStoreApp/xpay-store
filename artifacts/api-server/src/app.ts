@@ -9,11 +9,15 @@ import { sessionMiddleware } from "./lib/adminAuth";
 const app: Express = express();
 app.set("trust proxy", 1);
 
-// قائمة النطاقات المسموح بها من متغير البيئة (يمكن فصلها بفواصل)
-const allowedOrigins = process.env.CLIENT_URL?.split(",") || [
+// طباعة قيمة CLIENT_URL عند بدء التشغيل للتشخيص
+console.log("🔧 CLIENT_URL from env:", process.env.CLIENT_URL);
+
+const allowedOrigins = process.env.CLIENT_URL?.split(",").map(s => s.trim()) || [
   "http://localhost:5173",
   "http://localhost:3000",
 ];
+
+console.log("✅ Allowed Origins:", allowedOrigins);
 
 app.use(
   pinoHttp({
@@ -38,10 +42,11 @@ app.use(
 app.use(
   cors({
     origin: (origin, callback) => {
-      // السماح للطلبات بدون origin (مثل mobile apps أو server-to-server)
+      console.log("🌐 Request Origin:", origin);
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.error("❌ CORS rejected origin:", origin);
         callback(new Error("Not allowed by CORS"));
       }
     },
