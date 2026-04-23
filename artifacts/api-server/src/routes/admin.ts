@@ -1128,3 +1128,5 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
     res.status(500).json({ error: error.message || "فشلت المزامنة" });
   }
 });
+
+export default router;
