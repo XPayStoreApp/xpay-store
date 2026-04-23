@@ -48,6 +48,7 @@ export const productsTable = pgTable("products", {
   featured: boolean("featured").notNull().default(false),
   providerId: integer("provider_id"),
   source: text("source").notNull().default("manual"),
+  providerProductId: integer("provider_product_id"), // <-- تمت الإضافة
 });
 
 export const newsTable = pgTable("news", {
@@ -140,6 +141,7 @@ export const providersTable = pgTable("providers", {
   notes: text("notes"),
   priority: integer("priority").notNull().default(0),
   active: boolean("active").notNull().default(true),
+  providerType: text("provider_type").default("custom"), // <-- تمت الإضافة
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
