@@ -1,4 +1,4 @@
-import { useState, useEffect, ReactNode } from "react";
+import { useState, useEffect } from "react";
 import { get, post, put, del } from "../lib/api";
 import { Plus, Edit2, Trash2, X, Save } from "lucide-react";
 
@@ -20,7 +20,7 @@ export interface CrudConfig {
   resource: string;
   title: string;
   fields: FieldDef[];
-  rowExtras?: (row: any) => ReactNode;
+  rowExtras?: (row: any) => React.ReactNode;
   beforeSubmit?: (data: any) => any;
 }
 
@@ -29,12 +29,16 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // حالة التحديد المتعدد
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
       const data = await get(`/${resource}`);
       setItems(Array.isArray(data) ? data : data.items || []);
+      setSelectedIds(new Set()); // إعادة تعيين التحديد بعد التحميل
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -67,25 +71,70 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
     }
   };
 
+  // تحديد/إلغاء تحديد صف واحد
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      return newSet;
+    });
+  };
+
+  // تحديد الكل/إلغاء الكل
+  const toggleAll = () => {
+    if (selectedIds.size === items.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map((item) => item.id)));
+    }
+  };
+
+  // حذف جماعي
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`هل أنت متأكد من حذف ${selectedIds.size} عنصر؟`)) return;
+    setBulkDeleting(true);
+    try {
+      await post("/bulk-delete", { resource, ids: Array.from(selectedIds) });
+      await load();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const tableFields = fields.filter((f) => !f.hideInTable);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-        <button
-          onClick={() =>
-            setEditing(
-              fields.reduce<Record<string, any>>((acc, f) => {
-                acc[f.name] = f.default ?? (f.type === "boolean" ? false : "");
-                return acc;
-              }, {}),
-            )
-          }
-          className="flex items-center gap-2 bg-brand-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-brand-700"
-        >
-          <Plus size={18} /> إضافة جديد
-        </button>
+        <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-rose-700 disabled:opacity-50"
+            >
+              <Trash2 size={16} /> حذف المحدد ({selectedIds.size})
+            </button>
+          )}
+          <button
+            onClick={() =>
+              setEditing(
+                fields.reduce<Record<string, any>>((acc, f) => {
+                  acc[f.name] = f.default ?? (f.type === "boolean" ? false : "");
+                  return acc;
+                }, {}),
+              )
+            }
+            className="flex items-center gap-2 bg-brand-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-brand-700"
+          >
+            <Plus size={18} /> إضافة جديد
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -97,6 +146,14 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
+                <th className="text-center px-3 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={items.length > 0 && selectedIds.size === items.length}
+                    onChange={toggleAll}
+                    className="w-4 h-4 accent-brand-600"
+                  />
+                </th>
                 <th className="text-right px-4 py-3 font-semibold">#</th>
                 {tableFields.map((f) => (
                   <th key={f.name} className="text-right px-4 py-3 font-semibold">
@@ -109,19 +166,27 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={tableFields.length + 2} className="text-center py-8 text-slate-400">
+                  <td colSpan={tableFields.length + 3} className="text-center py-8 text-slate-400">
                     جاري التحميل...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={tableFields.length + 2} className="text-center py-8 text-slate-400">
+                  <td colSpan={tableFields.length + 3} className="text-center py-8 text-slate-400">
                     لا توجد بيانات
                   </td>
                 </tr>
               ) : (
                 items.map((row) => (
                   <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="text-center px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => toggleSelect(row.id)}
+                        className="w-4 h-4 accent-brand-600"
+                      />
+                    </td>
                     <td className="px-4 py-3 text-slate-500">{row.id}</td>
                     {tableFields.map((f) => (
                       <td key={f.name} className="px-4 py-3">

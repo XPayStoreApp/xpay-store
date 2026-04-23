@@ -912,6 +912,66 @@ router.delete("/admin/vip/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ========== BULK DELETE ==========
+router.post("/admin/bulk-delete", requireAdmin, async (req, res) => {
+  const { resource, ids } = req.body as { resource: string; ids: number[] };
+  if (!resource || !Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "بيانات غير صالحة" });
+    return;
+  }
+
+  // جدول حسب المورد
+  const tableMap: Record<string, any> = {
+    categories: categoriesTable,
+    products: productsTable,
+    providers: providersTable,
+    coupons: couponsTable,
+    banners: bannersTable,
+    news: newsTable,
+    paymentMethods: paymentMethodsTable,
+    socialLinks: socialLinksTable,
+    vipMemberships: vipMembershipsTable,
+    autoCodes: autoCodesTable,
+    orderMessages: orderMessagesTable,
+    apiKeys: apiKeysTable,
+    notifications: notificationsTable,
+  };
+
+  const table = tableMap[resource];
+  if (!table) {
+    res.status(400).json({ error: "المورد غير مدعوم" });
+    return;
+  }
+
+  // تنفيذ الحذف المتسلسل حسب المورد
+  try {
+    if (resource === "categories") {
+      for (const id of ids) {
+        await db.execute(sql`DELETE FROM products WHERE category_id = ${id}`);
+      }
+    } else if (resource === "providers") {
+      for (const id of ids) {
+        await db.execute(sql`DELETE FROM products WHERE provider_id = ${id}`);
+      }
+    }
+
+    await db.delete(table).where(sql`${table.id} = ANY(${ids})`);
+
+    await logActivity(
+      { id: req.session.adminId, name: req.session.adminUsername },
+      "bulk_delete",
+      resource,
+      { ids }
+    );
+
+    res.json({ ok: true, deletedCount: ids.length });
+  } catch (error: any) {
+    console.error("Bulk delete error:", error);
+    res.status(500).json({ error: error.message || "فشل الحذف الجماعي" });
+  }
+});
+
+
 // ========== NOTIFICATIONS DELETE ==========
 router.delete("/admin/notifications/:id", requireAdmin, async (req, res) => {
   await db.delete(notificationsTable).where(eq(notificationsTable.id, Number(req.params.id)));
