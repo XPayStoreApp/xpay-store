@@ -24,6 +24,7 @@ import {
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { requireAdmin } from "../lib/adminAuth.js";
 import { getAdapter } from "../lib/adapter-registry";
+import { MersalAdapter } from "../lib/mersal-adapter";
 
 const router: IRouter = Router();
 
@@ -1021,11 +1022,7 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
     return;
   }
 
-  const adapter = getAdapter(provider.providerType || "custom");
-  if (!adapter) {
-    res.status(400).json({ error: "نوع المزود غير مدعوم" });
-    return;
-  }
+  const adapter = new MersalAdapter();
 
   try {
     const products = await adapter.fetchProducts(
@@ -1037,7 +1034,6 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
     let updated = 0;
 
     for (const p of products) {
-      // ابحث عن فئة محلية تطابق categoryName أو أنشئ واحدة جديدة
       let categoryId: number | undefined;
       const [existingCat] = await db
         .select()
@@ -1062,7 +1058,6 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
 
       if (!categoryId) continue;
 
-      // ابحث عن منتج موجود بنفس providerProductId
       const [existingProd] = await db
         .select()
         .from(productsTable)
@@ -1076,7 +1071,7 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
         name: p.name,
         image: p.categoryImage || "/cat-cards.png",
         priceUsd: String(p.price),
-        priceSyp: "0", // يمكن ضبطه لاحقًا حسب سعر الصرف
+        priceSyp: "0",
         basePriceUsd: p.basePrice ? String(p.basePrice) : null,
         productType: p.productType as "amount" | "package",
         available: p.available,
@@ -1107,7 +1102,7 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
 
     res.json({
       ok: true,
-      message: `تمت المزامنة: ${imported} منتج جديد، ${updated} منتج محدث`,
+      message: `✅ تمت المزامنة: ${imported} منتج جديد، ${updated} منتج محدث`,
       imported,
       updated,
     });
