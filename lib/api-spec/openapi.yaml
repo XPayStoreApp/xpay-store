@@ -1,0 +1,422 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: XPayStore API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+  - name: catalog
+  - name: orders
+  - name: deposits
+  - name: user
+  - name: meta
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+
+  /me:
+    get:
+      operationId: getProfile
+      tags: [user]
+      summary: Current user profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserProfile" }
+
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [catalog]
+      summary: List all categories
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Category" }
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [catalog]
+      summary: List products
+      parameters:
+        - in: query
+          name: categoryId
+          schema: { type: string }
+        - in: query
+          name: q
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+
+  /products/featured:
+    get:
+      operationId: listFeaturedProducts
+      tags: [catalog]
+      summary: Featured products for home slider
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [catalog]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+
+  /news:
+    get:
+      operationId: listNews
+      tags: [meta]
+      summary: News ticker entries
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NewsItem" }
+
+  /banners:
+    get:
+      operationId: listBanners
+      tags: [meta]
+      summary: Home banner slider
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Banner" }
+
+  /payment-methods:
+    get:
+      operationId: listPaymentMethods
+      tags: [meta]
+      summary: Available deposit payment methods
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PaymentMethod" }
+
+  /social-links:
+    get:
+      operationId: listSocialLinks
+      tags: [meta]
+      summary: Support / social links
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SocialLink" }
+
+  /orders:
+    get:
+      operationId: listMyOrders
+      tags: [orders]
+      summary: Current user orders
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [all, wait, accept, reject] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Order" }
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Create a new order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateOrderBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+
+  /orders/summary:
+    get:
+      operationId: getOrdersSummary
+      tags: [orders]
+      summary: Aggregated order stats for current user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrdersSummary" }
+
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+
+  /deposits:
+    get:
+      operationId: listMyDeposits
+      tags: [deposits]
+      summary: Current user deposits
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [all, pending, approved, rejected] }
+        - in: query
+          name: method
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Deposit" }
+    post:
+      operationId: createDeposit
+      tags: [deposits]
+      summary: Submit a manual deposit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateDepositBody" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deposit" }
+
+  /deposits/summary:
+    get:
+      operationId: getDepositsSummary
+      tags: [deposits]
+      summary: Aggregated deposit stats
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DepositsSummary" }
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status: { type: string }
+      required: [status]
+
+    UserProfile:
+      type: object
+      properties:
+        id: { type: string }
+        telegramId: { type: string }
+        username: { type: string }
+        balanceUsd: { type: number }
+        balanceSyp: { type: number }
+        role: { type: string, enum: [user, agent, admin] }
+      required: [id, telegramId, username, balanceUsd, balanceSyp, role]
+
+    Category:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        image: { type: string }
+        order: { type: integer }
+        active: { type: boolean }
+        productCount: { type: integer }
+      required: [id, name, image, order, active, productCount]
+
+    Product:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        categoryId: { type: string }
+        categoryName: { type: string }
+        image: { type: string }
+        priceUsd: { type: number }
+        priceSyp: { type: number }
+        productType: { type: string, enum: [amount, package] }
+        available: { type: boolean }
+        minQty: { type: number }
+        maxQty: { type: number }
+        description: { type: string }
+        featured: { type: boolean }
+      required: [id, name, categoryId, categoryName, image, priceUsd, priceSyp, productType, available, featured]
+
+    NewsItem:
+      type: object
+      properties:
+        id: { type: string }
+        content: { type: string }
+        type: { type: string, enum: [general, offer, alert, new_service] }
+      required: [id, content, type]
+
+    Banner:
+      type: object
+      properties:
+        id: { type: string }
+        image: { type: string }
+        title: { type: string }
+        link: { type: string }
+      required: [id, image, title]
+
+    PaymentMethod:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string, enum: [sham_cash, binance_pay, syriatel_cash, mtn_cash, usdt_auto] }
+        name: { type: string }
+        subtitle: { type: string }
+        instructions: { type: string }
+        walletAddress: { type: string }
+        qrImage: { type: string }
+        minAmount: { type: number }
+        active: { type: boolean }
+      required: [id, code, name, subtitle, active, minAmount]
+
+    SocialLink:
+      type: object
+      properties:
+        id: { type: string }
+        platform: { type: string }
+        url: { type: string }
+        label: { type: string }
+      required: [id, platform, url, label]
+
+    Order:
+      type: object
+      properties:
+        id: { type: string }
+        orderNumber: { type: string }
+        productId: { type: string }
+        productName: { type: string }
+        productImage: { type: string }
+        quantity: { type: number }
+        userIdentifier: { type: string }
+        totalUsd: { type: number }
+        totalSyp: { type: number }
+        status: { type: string, enum: [wait, accept, reject] }
+        createdAt: { type: string }
+      required: [id, orderNumber, productId, productName, quantity, totalUsd, totalSyp, status, createdAt]
+
+    CreateOrderBody:
+      type: object
+      properties:
+        productId: { type: string }
+        quantity: { type: number }
+        userIdentifier: { type: string }
+      required: [productId, quantity]
+
+    OrdersSummary:
+      type: object
+      properties:
+        totalAcceptedUsd: { type: number }
+        waitCount: { type: integer }
+        acceptCount: { type: integer }
+        totalCount: { type: integer }
+      required: [totalAcceptedUsd, waitCount, acceptCount, totalCount]
+
+    Deposit:
+      type: object
+      properties:
+        id: { type: string }
+        amountUsd: { type: number }
+        amountSyp: { type: number }
+        currency: { type: string, enum: [USD, SYP] }
+        method: { type: string }
+        methodLabel: { type: string }
+        transactionId: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        createdAt: { type: string }
+      required: [id, amountUsd, currency, method, methodLabel, transactionId, status, createdAt]
+
+    CreateDepositBody:
+      type: object
+      properties:
+        method: { type: string }
+        currency: { type: string, enum: [USD, SYP] }
+        amount: { type: number }
+        transactionId: { type: string }
+      required: [method, currency, amount, transactionId]
+
+    DepositsSummary:
+      type: object
+      properties:
+        totalApprovedUsd: { type: number }
+        pendingCount: { type: integer }
+        approvedCount: { type: integer }
+        totalCount: { type: integer }
+      required: [totalApprovedUsd, pendingCount, approvedCount, totalCount]
