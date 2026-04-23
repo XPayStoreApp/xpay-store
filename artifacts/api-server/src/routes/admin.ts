@@ -1187,4 +1187,41 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
   }
 });
 
+
+// ========== FETCH PROVIDER PRODUCTS (للاطلاع على المعرفات) ==========
+router.get("/admin/providers/:id/products", requireAdmin, async (req, res) => {
+  const providerId = Number(req.params.id);
+  const [provider] = await db
+    .select()
+    .from(providersTable)
+    .where(eq(providersTable.id, providerId))
+    .limit(1);
+
+  if (!provider) {
+    res.status(404).json({ error: "المزود غير موجود" });
+    return;
+  }
+
+  const adapter = new MersalAdapter();
+  try {
+    const products = await adapter.fetchProducts(
+      provider.apiKey!,
+      provider.apiUrl || undefined
+    );
+
+    // إعادة قائمة بالمعلومات الأساسية فقط (id, name, price)
+    const list = products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      category: p.categoryName,
+    }));
+
+    res.json({ provider: provider.name, products: list });
+  } catch (error: any) {
+    console.error("Fetch provider products error:", error);
+    res.status(500).json({ error: error.message || "فشل جلب المنتجات" });
+  }
+});
+
 export default router;
