@@ -970,6 +970,7 @@ router.post("/admin/bulk-delete", requireAdmin, async (req, res) => {
   }
 });
 
+
 // ========== NOTIFICATIONS DELETE ==========
 router.delete("/admin/notifications/:id", requireAdmin, async (req, res) => {
   await db.delete(notificationsTable).where(eq(notificationsTable.id, Number(req.params.id)));
