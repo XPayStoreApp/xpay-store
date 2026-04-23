@@ -23,6 +23,7 @@ import {
 } from "@workspace/db";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { requireAdmin } from "../lib/adminAuth.js";
+import { getAdapter } from "../lib/adapter-registry";
 
 const router: IRouter = Router();
 
@@ -253,6 +254,7 @@ makeCrud("products", productsTable, {
     "featured",
     "providerId",
     "source",
+    "providerProductId",
   ],
 });
 
@@ -285,7 +287,7 @@ makeCrud("social-links", socialLinksTable, {
 
 makeCrud("providers", providersTable, {
   orderBy: providersTable.priority,
-  allowedFields: ["name", "apiUrl", "apiKey", "notes", "priority", "active"],
+  allowedFields: ["name", "apiUrl", "apiKey", "notes", "priority", "active", "providerType"],
 });
 
 makeCrud("coupons", couponsTable, {
@@ -402,8 +404,6 @@ router.post("/admin/orders/:id/status", requireAdmin, async (req, res) => {
     .set({ status })
     .where(eq(ordersTable.id, Number(req.params.id)))
     .returning();
-  // refund balance if rejecting an accepted order? Skip for simplicity.
-  // Deduct user balance on first acceptance? We deducted at creation in user flow.
   await logActivity(
     { id: req.session.adminId, name: req.session.adminUsername },
     "order_status",
@@ -437,7 +437,6 @@ router.post("/admin/deposits/:id/status", requireAdmin, async (req, res) => {
     res.status(404).json({ error: "غير موجود" });
     return;
   }
-  // approve: credit user balance
   if (status === "approved" && dep.status !== "approved") {
     const col = dep.currency === "SYP" ? "balanceSyp" : "balanceUsd";
     const amount = dep.currency === "SYP" ? dep.amountSyp : dep.amountUsd;
@@ -814,7 +813,7 @@ const PUT_RESOURCES: Array<{ path: string; table: any; allowed: string[] }> = [
     allowed: [
       "categoryId", "name", "image", "priceUsd", "priceSyp", "basePriceUsd",
       "productType", "available", "minQty", "maxQty", "description", "featured",
-      "providerId", "source",
+      "providerId", "source", "providerProductId",
     ],
   },
   { path: "news", table: newsTable, allowed: ["content", "type", "active"] },
@@ -828,7 +827,7 @@ const PUT_RESOURCES: Array<{ path: string; table: any; allowed: string[] }> = [
     ],
   },
   { path: "social-links", table: socialLinksTable, allowed: ["platform", "url", "label", "order"] },
-  { path: "providers", table: providersTable, allowed: ["name", "apiUrl", "apiKey", "notes", "priority", "active"] },
+  { path: "providers", table: providersTable, allowed: ["name", "apiUrl", "apiKey", "notes", "priority", "active", "providerType"] },
   { path: "coupons", table: couponsTable, allowed: ["code", "discountPct", "maxUses", "usedCount", "active"] },
   { path: "vip-memberships", table: vipMembershipsTable, allowed: ["name", "requiredAmount", "profitPct", "badge", "hidden"] },
   { path: "auto-codes", table: autoCodesTable, allowed: ["productId", "code", "note", "used"] },
@@ -988,8 +987,6 @@ router.post("/admin/import", requireAdmin, async (req, res) => {
 });
 
 // ========== SETTINGS LIST/ITEMS WRAPPER ==========
-// Frontend uses GET /settings -> array, PUT { items: [{key,value}] }
-// Backend already has GET (object) and PUT (object); add list-shape aliases.
 router.get("/admin/settings/list", requireAdmin, async (_req, res) => {
   const rows = await db.select().from(settingsTable);
   res.json(rows);
@@ -1008,6 +1005,116 @@ router.put("/admin/settings/items", requireAdmin, async (req, res) => {
       .onConflictDoUpdate({ target: settingsTable.key, set: { value: it.value } });
   }
   res.json({ ok: true });
+});
+
+// ========== PROVIDER SYNC (NEW) ==========
+router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
+  const providerId = Number(req.params.id);
+  const [provider] = await db
+    .select()
+    .from(providersTable)
+    .where(eq(providersTable.id, providerId))
+    .limit(1);
+
+  if (!provider) {
+    res.status(404).json({ error: "المزود غير موجود" });
+    return;
+  }
+
+  const adapter = getAdapter(provider.providerType || "custom");
+  if (!adapter) {
+    res.status(400).json({ error: "نوع المزود غير مدعوم" });
+    return;
+  }
+
+  try {
+    const products = await adapter.fetchProducts(
+      provider.apiKey!,
+      provider.apiUrl || undefined
+    );
+
+    let imported = 0;
+    let updated = 0;
+
+    for (const p of products) {
+      // ابحث عن فئة محلية تطابق categoryName أو أنشئ واحدة جديدة
+      let categoryId: number | undefined;
+      const [existingCat] = await db
+        .select()
+        .from(categoriesTable)
+        .where(eq(categoriesTable.name, p.categoryName))
+        .limit(1);
+
+      if (existingCat) {
+        categoryId = existingCat.id;
+      } else {
+        const [newCat] = await db
+          .insert(categoriesTable)
+          .values({
+            name: p.categoryName,
+            image: p.categoryImage || "/cat-cards.png",
+            order: 0,
+            active: p.available,
+          })
+          .returning();
+        categoryId = newCat.id;
+      }
+
+      if (!categoryId) continue;
+
+      // ابحث عن منتج موجود بنفس providerProductId
+      const [existingProd] = await db
+        .select()
+        .from(productsTable)
+        .where(eq(productsTable.providerProductId, Number(p.id)))
+        .limit(1);
+
+      const productData = {
+        categoryId,
+        providerId,
+        providerProductId: Number(p.id),
+        name: p.name,
+        image: p.categoryImage || "/cat-cards.png",
+        priceUsd: String(p.price),
+        priceSyp: "0", // يمكن ضبطه لاحقًا حسب سعر الصرف
+        basePriceUsd: p.basePrice ? String(p.basePrice) : null,
+        productType: p.productType as "amount" | "package",
+        available: p.available,
+        minQty: p.minQty ? String(p.minQty) : null,
+        maxQty: p.maxQty ? String(p.maxQty) : null,
+        description: p.description || null,
+        source: "provider",
+      };
+
+      if (existingProd) {
+        await db
+          .update(productsTable)
+          .set(productData)
+          .where(eq(productsTable.id, existingProd.id));
+        updated++;
+      } else {
+        await db.insert(productsTable).values(productData);
+        imported++;
+      }
+    }
+
+    await logActivity(
+      { id: req.session.adminId, name: req.session.adminUsername },
+      "sync_provider",
+      `provider_${providerId}`,
+      { imported, updated }
+    );
+
+    res.json({
+      ok: true,
+      message: `تمت المزامنة: ${imported} منتج جديد، ${updated} منتج محدث`,
+      imported,
+      updated,
+    });
+  } catch (error: any) {
+    console.error("🔥 Sync error:", error);
+    res.status(500).json({ error: error.message || "فشلت المزامنة" });
+  }
 });
 
 export default router;
