@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Crud from "../components/Crud";
 import { api } from "../lib/api";
 
 export default function Providers() {
   const [syncing, setSyncing] = useState<number | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const handleSync = async (id: number) => {
     setSyncing(id);
@@ -38,13 +40,21 @@ export default function Providers() {
           { name: "providerType", label: "نوع المزود", type: "text", default: "custom" },
         ]}
         rowExtras={(row: any) => (
-          <button
-            onClick={() => handleSync(row.id)}
-            disabled={syncing === row.id}
-            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 text-xs"
-          >
-            {syncing === row.id ? "⏳" : "مزامنة"}
-          </button>
+          <div className="flex gap-1">
+            <button
+              onClick={() => handleSync(row.id)}
+              disabled={syncing === row.id}
+              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 text-xs"
+            >
+              {syncing === row.id ? "⏳" : "مزامنة"}
+            </button>
+            <button
+              onClick={() => navigate(`/providers/${row.id}/products`)}
+              className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 text-xs"
+            >
+              منتجات
+            </button>
+          </div>
         )}
       />
     </div>
