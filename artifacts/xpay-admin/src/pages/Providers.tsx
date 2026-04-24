@@ -27,8 +27,8 @@ export default function Providers() {
     setLoading(true);
     try {
       const data = await get<Provider[]>("/providers");
+      console.log("📦 Raw data from /providers:", data); // تشخيص
       setProviders(Array.isArray(data) ? data : []);
-      console.log("Loaded providers:", data); // تشخيص
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -74,13 +74,36 @@ export default function Providers() {
     await fetchProviders();
   };
 
-  const navigateToProducts = (p: any) => {
-    console.log("Full provider object:", p); // تشخيص
-    const pid = p.id; // أو p.ID أو p.providerId
+  // دالة استخراج المعرف بأي ثمن
+  const navigateToProducts = (p: any, event: React.MouseEvent) => {
+    // 1. طباعة كل ما يمكن معرفته عن الكائن
+    console.log("🔎 Full provider object:", JSON.parse(JSON.stringify(p)));
+    console.log("🔎 Object keys:", Object.keys(p));
+    console.log("🔎 p.id:", p.id, "p.ID:", (p as any).ID, "p.providerId:", (p as any).providerId);
+    
+    // 2. جرب كل الاحتمالات
+    let pid: any = p.id ?? (p as any).ID ?? (p as any).providerId ?? (p as any).provider_id;
+    
+    // 3. إذا لم نجد، استخرج من الصف DOM
     if (pid === undefined || pid === null || isNaN(Number(pid))) {
-      alert(`معرف المزود غير متوفر. اضغط F12 وابحث عن "Full provider object" في Console.`);
+      const target = event.currentTarget as HTMLElement;
+      const row = target.closest('tr') as HTMLElement | null;
+      if (row) {
+        const firstCell = row.cells[0]?.textContent?.trim();
+        console.log("🔎 Extracted from first cell:", firstCell);
+        if (firstCell && !isNaN(Number(firstCell))) {
+          pid = Number(firstCell);
+        }
+      }
+    }
+    
+    // 4. فحص أخير
+    if (pid === undefined || pid === null || isNaN(Number(pid))) {
+      alert(`تعذر استخراج معرف المزود (القيمة: ${pid}). افتح Console وأرسل لنا التفاصيل.`);
       return;
     }
+    
+    console.log("✅ Navigating to products with id:", pid);
     navigate(`/providers/${pid}/products`);
   };
 
@@ -117,51 +140,55 @@ export default function Providers() {
             ) : providers.length === 0 ? (
               <tr><td colSpan={5} className="text-center py-8 text-slate-400">لا يوجد مزودون</td></tr>
             ) : (
-              providers.map((p) => (
-                <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3 text-slate-500">{p.id}</td>
-                  <td className="px-4 py-3 font-medium">{p.name}</td>
-                  <td className="px-4 py-3 text-xs">
-                    <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded">{p.providerType}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {p.active ? (
-                      <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2 py-0.5 rounded">نعم</span>
-                    ) : (
-                      <span className="text-slate-500 text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">لا</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-center">
-                      <button
-                        onClick={() => navigateToProducts(p)}
-                        className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 text-xs"
-                      >
-                        منتجات
-                      </button>
-                      <button
-                        onClick={() => handleSync(p.id)}
-                        disabled={syncing === p.id}
-                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 text-xs"
-                      >
-                        {syncing === p.id ? "⏳" : "مزامنة"}
-                      </button>
-                      <button
-                        onClick={() => setEditing(p)}
-                        className="p-1.5 text-brand-600 hover:bg-brand-50 rounded"
-                      >
-                        <Edit2 size={15} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(p.id)}
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              providers.map((p) => {
+                // طباعة كل صف لفحصه
+                console.log("📋 Provider row:", JSON.parse(JSON.stringify(p)));
+                return (
+                  <tr key={p.id ?? Math.random()} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="px-4 py-3 text-slate-500">{p.id}</td>
+                    <td className="px-4 py-3 font-medium">{p.name}</td>
+                    <td className="px-4 py-3 text-xs">
+                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded">{p.providerType}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {p.active ? (
+                        <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2 py-0.5 rounded">نعم</span>
+                      ) : (
+                        <span className="text-slate-500 text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">لا</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 justify-center">
+                        <button
+                          onClick={(e) => navigateToProducts(p, e)}
+                          className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 text-xs"
+                        >
+                          منتجات
+                        </button>
+                        <button
+                          onClick={() => handleSync(p.id)}
+                          disabled={syncing === p.id}
+                          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 text-xs"
+                        >
+                          {syncing === p.id ? "⏳" : "مزامنة"}
+                        </button>
+                        <button
+                          onClick={() => setEditing(p)}
+                          className="p-1.5 text-brand-600 hover:bg-brand-50 rounded"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(p.id)}
+                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
