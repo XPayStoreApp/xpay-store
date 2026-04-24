@@ -28,6 +28,7 @@ export default function Providers() {
     try {
       const data = await get<Provider[]>("/providers");
       setProviders(Array.isArray(data) ? data : []);
+      console.log("Loaded providers:", data); // تشخيص
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -71,6 +72,16 @@ export default function Providers() {
     }
     setEditing(null);
     await fetchProviders();
+  };
+
+  const navigateToProducts = (p: any) => {
+    console.log("Full provider object:", p); // تشخيص
+    const pid = p.id; // أو p.ID أو p.providerId
+    if (pid === undefined || pid === null || isNaN(Number(pid))) {
+      alert(`معرف المزود غير متوفر. اضغط F12 وابحث عن "Full provider object" في Console.`);
+      return;
+    }
+    navigate(`/providers/${pid}/products`);
   };
 
   return (
@@ -123,7 +134,7 @@ export default function Providers() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-center">
                       <button
-                        onClick={() => navigate(`/providers/${p.id}/products`)}
+                        onClick={() => navigateToProducts(p)}
                         className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 text-xs"
                       >
                         منتجات
