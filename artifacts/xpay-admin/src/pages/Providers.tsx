@@ -41,20 +41,27 @@ export default function Providers() {
         ]}
         rowExtras={(row: any) => (
           <div className="flex gap-1">
-        
-	<button
-  onClick={() => {
-    if (!row.id) {
-      alert("معرف المزود غير متوفر. انتظر تحميل الصفحة.");
-      return;
-    }
-    navigate(`/providers/${row.id}/products`);
-  }}
-  className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 text-xs"
->
-  	منتجات
-	</button>
-
+            <button
+              onClick={() => handleSync(row.id)}
+              disabled={syncing === row.id}
+              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 text-xs"
+            >
+              {syncing === row.id ? "⏳" : "مزامنة"}
+            </button>
+            <button
+              onClick={() => {
+                console.log("Row data:", row); // للتشخيص
+                const providerId = row.id || row.ID || row.providerId;
+                if (!providerId || providerId === "undefined") {
+                  alert("معرف المزود غير متوفر. الرجاء تحديث الصفحة.");
+                  return;
+                }
+                navigate(`/providers/${providerId}/products`);
+              }}
+              className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 text-xs"
+            >
+              منتجات
+            </button>
           </div>
         )}
       />
