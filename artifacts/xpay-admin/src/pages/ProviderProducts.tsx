@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useLocation } from "wouter";
+import { useParams, useNavigate } from "react-router-dom";
 import { get } from "../lib/api";
 import { Copy, Check, ArrowLeft } from "lucide-react";
 
@@ -11,14 +11,20 @@ interface ProviderProduct {
 }
 
 export default function ProviderProducts() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>(); // استقبال id من الرابط
+  const navigate = useNavigate();
   const [products, setProducts] = useState<ProviderProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
-  const [, navigate] = useLocation();
 
   useEffect(() => {
+    if (!id || id === "undefined") {
+      setError("معرف المزود غير صالح. الرجاء العودة واختيار مزود.");
+      setLoading(false);
+      return;
+    }
+
     const fetchProducts = async () => {
       try {
         setLoading(true);
@@ -32,6 +38,7 @@ export default function ProviderProducts() {
         setLoading(false);
       }
     };
+
     fetchProducts();
   }, [id]);
 
