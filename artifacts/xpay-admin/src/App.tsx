@@ -14,6 +14,7 @@ import Banners from "./pages/Banners";
 import News from "./pages/News";
 import SocialLinks from "./pages/SocialLinks";
 import Providers from "./pages/Providers";
+import ProviderProducts from "./pages/ProviderProducts";
 import Coupons from "./pages/Coupons";
 import VipMemberships from "./pages/VipMemberships";
 import AutoCodes from "./pages/AutoCodes";
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/news" element={<News />} />
         <Route path="/social-links" element={<SocialLinks />} />
         <Route path="/providers" element={<Providers />} />
+	<Route path="/providers/:id/products" element={<ProviderProducts />} />
         <Route path="/coupons" element={<Coupons />} />
         <Route path="/vip" element={<VipMemberships />} />
         <Route path="/auto-codes" element={<AutoCodes />} />
