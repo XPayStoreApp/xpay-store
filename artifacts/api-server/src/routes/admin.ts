@@ -26,6 +26,90 @@ import { requireAdmin } from "../lib/adminAuth.js";
 import { getAdapter } from "../lib/adapter-registry"; 
 import { MersalAdapter } from "../lib/mersal-adapter";
 const router: IRouter = Router();
+const EXTERNAL_CATEGORY_NAME = "External Provider";
+const EXTERNAL_CATEGORY_IMAGE = "https://placehold.co/600x400?text=External+Provider";
+
+class ValidationError extends Error {
+  statusCode: number;
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+    this.statusCode = 400;
+  }
+}
+
+function isBlank(v: unknown): boolean {
+  return v === null || v === undefined || (typeof v === "string" && v.trim() === "");
+}
+
+function normalizeNumberField(data: Record<string, any>, key: string, opts?: { nullable?: boolean; required?: boolean }) {
+  const raw = data[key];
+  const nullable = opts?.nullable ?? false;
+  const required = opts?.required ?? false;
+
+  if (isBlank(raw)) {
+    if (required) throw new ValidationError(`${key} is required`);
+    data[key] = nullable ? null : raw;
+    return;
+  }
+
+  const n = Number(raw);
+  if (!Number.isFinite(n)) {
+    throw new ValidationError(`${key} must be a valid number`);
+  }
+  data[key] = n;
+}
+
+function findPgError(err: any): any {
+  let cur = err;
+  for (let i = 0; i < 6 && cur; i += 1) {
+    if (cur?.code && typeof cur.code === "string") return cur;
+    cur = cur?.cause;
+  }
+  return null;
+}
+
+function toHttpError(error: any): { status: number; message: string } {
+  if (typeof error?.statusCode === "number") {
+    return { status: error.statusCode, message: error?.message || "Validation error" };
+  }
+
+  const pg = findPgError(error);
+  if (pg) {
+    if (pg.code === "23503") {
+      return { status: 400, message: `Foreign key violation: ${pg?.detail || pg?.constraint || "invalid reference"}` };
+    }
+    if (pg.code === "23502") {
+      return { status: 400, message: `Missing required field: ${pg?.column || "unknown"}` };
+    }
+    if (pg.code === "22P02") {
+      return { status: 400, message: `Invalid value format: ${pg?.message || "bad input"}` };
+    }
+  }
+
+  return { status: 500, message: error?.message || "Internal server error" };
+}
+
+async function getOrCreateExternalCategoryId(): Promise<number> {
+  const [existing] = await db
+    .select({ id: categoriesTable.id })
+    .from(categoriesTable)
+    .where(eq(categoriesTable.name, EXTERNAL_CATEGORY_NAME))
+    .limit(1);
+
+  if (existing?.id) return existing.id;
+
+  const [created] = await db
+    .insert(categoriesTable)
+    .values({
+      name: EXTERNAL_CATEGORY_NAME,
+      image: EXTERNAL_CATEGORY_IMAGE,
+      active: true,
+    })
+    .returning({ id: categoriesTable.id });
+
+  return created.id;
+}
 
 async function logActivity(
   actor: { id?: number; name?: string } | null,
@@ -188,30 +272,48 @@ function makeCrud<T extends { id: any }>(
     res.json(row);
   });
   router.post(`/admin/${path}`, requireAdmin, async (req, res) => {
-    const data = filterFields(req.body, opts.allowedFields);
-    const [row] = (await db.insert(table).values(data).returning()) as any[];
-    await logActivity(
-      { id: req.session.adminId, name: req.session.adminUsername },
-      "create",
-      path,
-      { id: row.id },
-    );
-    res.json(row);
+    try {
+      const data = await sanitizeCrudDataForRuntimeSchema(
+        path,
+        filterFields(req.body, opts.allowedFields),
+      );
+      const [row] = (await db.insert(table).values(data).returning()) as any[];
+      await logActivity(
+        { id: req.session.adminId, name: req.session.adminUsername },
+        "create",
+        path,
+        { id: row.id },
+      );
+      res.json(row);
+    } catch (error: any) {
+      console.error(`Create ${path} failed:`, error);
+      const httpErr = toHttpError(error);
+      res.status(httpErr.status).json({ error: httpErr.message });
+    }
   });
   router.patch(`/admin/${path}/:id`, requireAdmin, async (req, res) => {
-    const data = filterFields(req.body, opts.allowedFields);
-    const [row] = await db
-      .update(table)
-      .set(data)
-      .where(eq(table.id, Number(req.params.id)))
-      .returning();
-    await logActivity(
-      { id: req.session.adminId, name: req.session.adminUsername },
-      "update",
-      path,
-      { id: row?.id },
-    );
-    res.json(row);
+    try {
+      const data = await sanitizeCrudDataForRuntimeSchema(
+        path,
+        filterFields(req.body, opts.allowedFields),
+      );
+      const [row] = await db
+        .update(table)
+        .set(data)
+        .where(eq(table.id, Number(req.params.id)))
+        .returning();
+      await logActivity(
+        { id: req.session.adminId, name: req.session.adminUsername },
+        "update",
+        path,
+        { id: row?.id },
+      );
+      res.json(row);
+    } catch (error: any) {
+      console.error(`Update ${path} failed:`, error);
+      const httpErr = toHttpError(error);
+      res.status(httpErr.status).json({ error: httpErr.message });
+    }
   });
   router.delete(`/admin/${path}/:id`, requireAdmin, async (req, res) => {
     await db.delete(table).where(eq(table.id, Number(req.params.id)));
@@ -230,6 +332,115 @@ function filterFields(body: any, allowed?: string[]): any {
   const out: any = {};
   for (const k of allowed) if (k in body) out[k] = body[k];
   return out;
+}
+
+const columnExistsCache = new Map<string, boolean>();
+
+async function hasColumn(tableName: string, columnName: string): Promise<boolean> {
+  const cacheKey = `${tableName}.${columnName}`;
+  const cached = columnExistsCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const result = await db.execute(sql`
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = ${tableName}
+      AND column_name = ${columnName}
+    LIMIT 1
+  `);
+  const exists = (result.rows as any[]).length > 0;
+  columnExistsCache.set(cacheKey, exists);
+  return exists;
+}
+
+async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promise<any> {
+  if (!data || typeof data !== "object") return data;
+  const normalized: Record<string, any> = { ...data };
+
+  if (path === "products") {
+    if ("name" in normalized && typeof normalized.name === "string") {
+      normalized.name = normalized.name.trim();
+    }
+    if ("image" in normalized && typeof normalized.image === "string") {
+      normalized.image = normalized.image.trim();
+    }
+    if ("description" in normalized && typeof normalized.description === "string") {
+      normalized.description = normalized.description.trim();
+      if (normalized.description === "") normalized.description = null;
+    }
+    if ("source" in normalized && typeof normalized.source === "string") {
+      normalized.source = normalized.source.trim() || "manual";
+    }
+
+    const source = String(normalized.source || "manual").toLowerCase();
+    const isExternalProduct =
+      source !== "manual" || !isBlank(normalized.providerId) || !isBlank(normalized.providerProductId);
+
+    if ("categoryId" in normalized) normalizeNumberField(normalized, "categoryId", { required: true });
+    if ("priceUsd" in normalized) normalizeNumberField(normalized, "priceUsd", { required: true });
+    if ("priceSyp" in normalized) normalizeNumberField(normalized, "priceSyp", { required: true });
+    if ("basePriceUsd" in normalized) normalizeNumberField(normalized, "basePriceUsd", { nullable: true });
+    if ("minQty" in normalized) normalizeNumberField(normalized, "minQty", { nullable: true });
+    if ("maxQty" in normalized) normalizeNumberField(normalized, "maxQty", { nullable: true });
+    if ("providerId" in normalized) normalizeNumberField(normalized, "providerId", { nullable: true });
+    if ("providerProductId" in normalized) {
+      normalizeNumberField(normalized, "providerProductId", { nullable: true });
+    }
+
+    if ("available" in normalized) normalized.available = !!normalized.available;
+    if ("featured" in normalized) normalized.featured = !!normalized.featured;
+
+    if (isBlank(normalized.name)) throw new ValidationError("name is required");
+    if (isBlank(normalized.image)) throw new ValidationError("image is required");
+    if (!isExternalProduct && isBlank(normalized.categoryId)) {
+      throw new ValidationError("categoryId is required for manual products");
+    }
+    if (isBlank(normalized.priceUsd)) throw new ValidationError("priceUsd is required");
+    if (isBlank(normalized.priceSyp)) throw new ValidationError("priceSyp is required");
+
+    if (normalized.minQty != null && normalized.maxQty != null && normalized.minQty > normalized.maxQty) {
+      throw new ValidationError("minQty must be less than or equal to maxQty");
+    }
+
+    if (normalized.categoryId != null) {
+      const [category] = await db
+        .select({ id: categoriesTable.id })
+        .from(categoriesTable)
+        .where(eq(categoriesTable.id, Number(normalized.categoryId)))
+        .limit(1);
+      if (!category) {
+        if (isExternalProduct) {
+          normalized.categoryId = await getOrCreateExternalCategoryId();
+        } else {
+          throw new ValidationError(`categoryId ${normalized.categoryId} does not exist`);
+        }
+      }
+    } else if (isExternalProduct) {
+      normalized.categoryId = await getOrCreateExternalCategoryId();
+    }
+
+    if (normalized.providerId != null) {
+      const [provider] = await db
+        .select({ id: providersTable.id })
+        .from(providersTable)
+        .where(eq(providersTable.id, Number(normalized.providerId)))
+        .limit(1);
+      if (!provider) throw new ValidationError(`providerId ${normalized.providerId} does not exist`);
+    }
+  }
+
+  if (path === "products" && "providerProductId" in normalized) {
+    const exists = await hasColumn("products", "provider_product_id");
+    if (!exists) delete normalized.providerProductId;
+  }
+
+  if (path === "providers" && "providerType" in normalized) {
+    const exists = await hasColumn("providers", "provider_type");
+    if (!exists) delete normalized.providerType;
+  }
+
+  return normalized;
 }
 
 // ========== RESOURCES ==========

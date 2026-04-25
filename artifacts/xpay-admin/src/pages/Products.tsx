@@ -3,21 +3,29 @@ import Crud from "../components/Crud";
 import { get } from "../lib/api";
 
 export default function Products() {
+  const [categories, setCategories] = useState<{ value: string; label: string }[]>([]);
   const [providers, setProviders] = useState<{ value: string; label: string }[]>([]);
 
-  // جلب قائمة المزودين لاستخدامها في حقل Provider
+  // جلب قائمة الفئات والمزودين لاستخدامها في الحقول المرتبطة
   useEffect(() => {
-    const fetchProviders = async () => {
+    const fetchRefs = async () => {
       try {
-        const data = await get<any[]>("/providers");
-        if (Array.isArray(data)) {
-          setProviders(data.map((p: any) => ({ value: String(p.id), label: p.name })));
+        const [cats, provs] = await Promise.all([
+          get<any[]>("/categories"),
+          get<any[]>("/providers"),
+        ]);
+
+        if (Array.isArray(cats)) {
+          setCategories(cats.map((c: any) => ({ value: String(c.id), label: `${c.id} - ${c.name}` })));
+        }
+        if (Array.isArray(provs)) {
+          setProviders(provs.map((p: any) => ({ value: String(p.id), label: `${p.id} - ${p.name}` })));
         }
       } catch (err) {
-        console.error("Error fetching providers:", err);
+        console.error("Error fetching references:", err);
       }
     };
-    fetchProviders();
+    fetchRefs();
   }, []);
 
   return (
@@ -25,11 +33,17 @@ export default function Products() {
       resource="products"
       title="المنتجات"
       fields={[
-        { name: "categoryId", label: "رقم الفئة", type: "number", required: true },
+        {
+          name: "categoryId",
+          label: "الفئة",
+          type: "select",
+          required: false,
+          options: categories.length > 0 ? categories : [{ value: "", label: "لا توجد فئات" }],
+        },
         { name: "name", label: "اسم المنتج", type: "text", required: true },
-        { name: "image", label: "رابط الصورة", type: "text" },
+        { name: "image", label: "رابط الصورة", type: "text", required: true },
         { name: "priceUsd", label: "السعر (USD)", type: "number", step: "0.0001", required: true },
-        { name: "priceSyp", label: "السعر (SYP)", type: "number", step: "0.01" },
+        { name: "priceSyp", label: "السعر (SYP)", type: "number", step: "0.01", required: true },
         { name: "basePriceUsd", label: "سعر التكلفة (USD)", type: "number", step: "0.0001" },
         {
           name: "productType",
