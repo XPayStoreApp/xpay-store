@@ -25,7 +25,7 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { requireAdmin } from "../lib/adminAuth.js";
 import { getAdapter } from "../lib/adapter-registry"; 
 import { MersalAdapter } from "../lib/mersal-adapter";
-import { getTelegramConfigStatus, notifyUserDepositApproved, notifyUserDepositRejected } from "../lib/telegram.js";
+import { getTelegramConfigStatus, notifyUserDepositApproved, notifyUserDepositRejected, notifyUserOrderStatusChanged } from "../lib/telegram.js";
 const router: IRouter = Router();
 const EXTERNAL_CATEGORY_NAME = "External Provider";
 const EXTERNAL_CATEGORY_IMAGE = "https://placehold.co/600x400?text=External+Provider";
@@ -156,6 +156,48 @@ async function applyDepositStatusChange(id: number, status: string) {
       }
     } catch (error) {
       console.error("Notify deposit user failed:", error);
+    }
+  }
+
+  return { updated };
+}
+
+async function applyOrderStatusChange(id: number, status: string, note?: string) {
+  const [order] = await db
+    .select()
+    .from(ordersTable)
+    .where(eq(ordersTable.id, id))
+    .limit(1);
+  if (!order) return { error: "not_found" as const };
+
+  const [updated] = await db
+    .update(ordersTable)
+    .set({ status })
+    .where(eq(ordersTable.id, id))
+    .returning();
+
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, order.userId))
+    .limit(1);
+  const [product] = await db
+    .select()
+    .from(productsTable)
+    .where(eq(productsTable.id, order.productId))
+    .limit(1);
+
+  if (user && product) {
+    try {
+      await notifyUserOrderStatusChanged({
+        telegramId: user.telegramId,
+        orderNumber: order.orderNumber,
+        productName: product.name,
+        status,
+        note,
+      });
+    } catch (error) {
+      console.error("Notify order status user failed:", error);
     }
   }
 
@@ -702,18 +744,19 @@ router.get("/admin/orders", requireAdmin, async (req, res) => {
 
 router.post("/admin/orders/:id/status", requireAdmin, async (req, res) => {
   const { status, note } = req.body as { status: string; note?: string };
-  const [updated] = await db
-    .update(ordersTable)
-    .set({ status })
-    .where(eq(ordersTable.id, Number(req.params.id)))
-    .returning();
+  const id = Number(req.params.id);
+  const result = await applyOrderStatusChange(id, status, note);
+  if ("error" in result) {
+    res.status(404).json({ error: "غير موجود" });
+    return;
+  }
   await logActivity(
     { id: req.session.adminId, name: req.session.adminUsername },
     "order_status",
-    String(req.params.id),
+    String(id),
     { status, note },
   );
-  res.json(updated);
+  res.json(result.updated);
 });
 
 // ========== DEPOSITS ==========
@@ -1031,19 +1074,20 @@ router.patch("/admin/users/:id/ban", requireAdmin, async (req, res) => {
 
 // ========== STATUS PATCH ALIASES ==========
 router.patch("/admin/orders/:id/status", requireAdmin, async (req, res) => {
-  const { status } = req.body as { status: string };
-  const [updated] = await db
-    .update(ordersTable)
-    .set({ status })
-    .where(eq(ordersTable.id, Number(req.params.id)))
-    .returning();
+  const { status, note } = req.body as { status: string; note?: string };
+  const id = Number(req.params.id);
+  const result = await applyOrderStatusChange(id, status, note);
+  if ("error" in result) {
+    res.status(404).json({ error: "غير موجود" });
+    return;
+  }
   await logActivity(
     { id: req.session.adminId, name: req.session.adminUsername },
     "order_status",
-    String(req.params.id),
-    { status },
+    String(id),
+    { status, note },
   );
-  res.json(updated);
+  res.json(result.updated);
 });
 
 router.patch("/admin/deposits/:id/status", requireAdmin, async (req, res) => {

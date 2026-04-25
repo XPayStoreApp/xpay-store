@@ -168,3 +168,35 @@ export async function notifyUserOrderCreated(args: {
     `التفاصيل: ${args.details}`;
   await sendTelegramMessage("store", args.telegramId, msg);
 }
+
+export async function notifyUserOrderStatusChanged(args: {
+  telegramId: string;
+  orderNumber: string;
+  productName: string;
+  status: "accept" | "reject" | "wait" | string;
+  note?: string;
+}) {
+  const statusLabel =
+    args.status === "accept"
+      ? "✅ مكتمل"
+      : args.status === "reject"
+        ? "❌ مرفوض"
+        : "⏳ قيد الانتظار";
+
+  const details =
+    args.note?.trim() ||
+    (args.status === "accept"
+      ? "تمت العملية بنجاح."
+      : args.status === "reject"
+        ? "تم رفض الطلب من الإدارة."
+        : "انتظر قليلا، الطلب قيد المعالجة.");
+
+  const msg =
+    `📦 تحديث حالة الطلب\n` +
+    `🔢 رقم الطلب: ${args.orderNumber}\n` +
+    `🛍 المنتج: ${args.productName}\n` +
+    `📊 الحالة: ${statusLabel}\n` +
+    `التفاصيل: ${details}`;
+
+  await sendTelegramMessage("store", args.telegramId, msg);
+}
