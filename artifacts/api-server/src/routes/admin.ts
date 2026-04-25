@@ -1435,4 +1435,127 @@ router.get("/admin/providers/:id/products", requireAdmin, async (req, res) => {
   }
 });
 
+// ========== VERIFY SINGLE PRODUCT AGAINST PROVIDER ==========
+router.get("/admin/products/:id/provider-status", requireAdmin, async (req, res) => {
+  const productId = Number(req.params.id);
+  const [product] = await db
+    .select()
+    .from(productsTable)
+    .where(eq(productsTable.id, productId))
+    .limit(1);
+
+  if (!product) {
+    res.status(404).json({ error: "المنتج غير موجود" });
+    return;
+  }
+
+  if (!product.providerId) {
+    res.json({
+      ok: true,
+      type: "local",
+      existsAtProvider: false,
+      message: "هذا منتج محلي غير مرتبط بمزوّد خارجي.",
+      product: {
+        id: product.id,
+        name: product.name,
+        source: product.source,
+      },
+    });
+    return;
+  }
+
+  const [provider] = await db
+    .select()
+    .from(providersTable)
+    .where(eq(providersTable.id, product.providerId))
+    .limit(1);
+
+  if (!provider) {
+    res.status(400).json({ error: `المزوّد المرتبط (${product.providerId}) غير موجود` });
+    return;
+  }
+
+  const apiUrl = provider.apiUrl || "https://api.mersal-card.com";
+  let isMersalHost = false;
+  try {
+    const host = new URL(apiUrl).host.toLowerCase();
+    isMersalHost = host === "api.mersal-card.com";
+  } catch {
+    isMersalHost = false;
+  }
+
+  if (!product.providerProductId) {
+    res.json({
+      ok: true,
+      type: "provider",
+      existsAtProvider: false,
+      provider: {
+        id: provider.id,
+        name: provider.name,
+        providerType: provider.providerType,
+        apiUrl,
+        isMersalHost,
+      },
+      product: {
+        id: product.id,
+        name: product.name,
+        source: product.source,
+      },
+      message: "المنتج مرتبط بمزوّد لكن بدون providerProductId.",
+    });
+    return;
+  }
+
+  const adapter = getAdapter(provider.providerType || "custom");
+  if (!adapter) {
+    res.status(400).json({ error: `نوع المزوّد غير مدعوم: ${provider.providerType}` });
+    return;
+  }
+
+  try {
+    const remoteProducts = await adapter.fetchProducts(provider.apiKey!, provider.apiUrl || undefined);
+    const remote = remoteProducts.find((p) => Number(p.id) === Number(product.providerProductId));
+    const remotePrice = remote?.price != null ? Number(remote.price) : null;
+    const localPrice = Number(product.priceUsd);
+
+    res.json({
+      ok: true,
+      type: "provider",
+      existsAtProvider: !!remote,
+      provider: {
+        id: provider.id,
+        name: provider.name,
+        providerType: provider.providerType,
+        apiUrl,
+        isMersalHost,
+      },
+      product: {
+        id: product.id,
+        name: product.name,
+        source: product.source,
+        localProviderProductId: product.providerProductId,
+        localPriceUsd: localPrice,
+      },
+      remote: remote
+        ? {
+            id: remote.id,
+            name: remote.name,
+            priceUsd: remotePrice,
+            categoryName: remote.categoryName,
+            available: remote.available,
+            minQty: remote.minQty ?? null,
+            maxQty: remote.maxQty ?? null,
+          }
+        : null,
+      priceDiffUsd: remotePrice != null ? Number((localPrice - remotePrice).toFixed(6)) : null,
+      message: remote
+        ? "تم العثور على المنتج عند المزوّد الخارجي."
+        : "لم يتم العثور على providerProductId في قائمة منتجات المزوّد.",
+    });
+  } catch (error: any) {
+    console.error("Verify provider product error:", error);
+    res.status(500).json({ error: error?.message || "فشل التحقق من المنتج عند المزوّد" });
+  }
+});
+
 export default router;

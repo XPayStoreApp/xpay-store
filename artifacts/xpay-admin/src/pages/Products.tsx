@@ -5,6 +5,7 @@ import { get } from "../lib/api";
 export default function Products() {
   const [categories, setCategories] = useState<{ value: string; label: string }[]>([]);
   const [providers, setProviders] = useState<{ value: string; label: string }[]>([]);
+  const [verifyingId, setVerifyingId] = useState<number | null>(null);
 
   // جلب قائمة الفئات والمزودين لاستخدامها في الحقول المرتبطة
   useEffect(() => {
@@ -28,10 +29,42 @@ export default function Products() {
     fetchRefs();
   }, []);
 
+  const verifyProviderProduct = async (row: any) => {
+    try {
+      setVerifyingId(row.id);
+      const result = await get<any>(`/products/${row.id}/provider-status`);
+      const lines = [
+        `المنتج: ${row.name} (#${row.id})`,
+        `النوع: ${result.type}`,
+        `المصدر المحلي: ${result.product?.source ?? "-"}`,
+        `هل موجود عند المزوّد: ${result.existsAtProvider ? "نعم" : "لا"}`,
+        `المزوّد: ${result.provider?.name ?? "-"}`,
+        `رابط API: ${result.provider?.apiUrl ?? "-"}`,
+        `هل المصدر هو api.mersal-card.com: ${result.provider?.isMersalHost ? "نعم" : "لا"}`,
+        `رسالة التحقق: ${result.message ?? "-"}`,
+      ];
+      alert(lines.join("\n"));
+    } catch (err: any) {
+      alert(`فشل التحقق: ${err.message}`);
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
   return (
     <Crud
       resource="products"
       title="المنتجات"
+      rowExtras={(row) => (
+        <button
+          onClick={() => verifyProviderProduct(row)}
+          disabled={verifyingId === row.id}
+          className="px-2 py-1 text-xs rounded bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50"
+          title="تحقق من المنتج عند المزوّد"
+        >
+          {verifyingId === row.id ? "جارٍ التحقق..." : "تحقق"}
+        </button>
+      )}
       fields={[
         {
           name: "categoryId",
@@ -60,10 +93,9 @@ export default function Products() {
         { name: "maxQty", label: "الحد الأقصى للكمية", type: "number", step: "0.01" },
         { name: "description", label: "الوصف", type: "textarea" },
         { name: "featured", label: "مميز", type: "boolean", default: false },
-        // حقل المزود – اختيار من قائمة المزودين
         {
           name: "providerId",
-          label: "المزود",
+          label: "المزوّد",
           type: "select",
           options: providers.length > 0 ? providers : [{ value: "", label: "لا يوجد مزودون" }],
         },
