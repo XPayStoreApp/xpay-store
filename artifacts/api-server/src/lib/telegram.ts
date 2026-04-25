@@ -4,6 +4,7 @@ const ADMIN_BOT_TOKEN = process.env.TELEGRAM_ADMIN_BOT_TOKEN || "";
 const STORE_BOT_TOKEN = process.env.TELEGRAM_STORE_BOT_TOKEN || "";
 const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID || "";
 const WEBHOOK_SECRET = process.env.TELEGRAM_ADMIN_WEBHOOK_SECRET || "";
+const PUBLIC_API_BASE = (process.env.PUBLIC_API_BASE_URL || process.env.API_PUBLIC_URL || "").replace(/\/+$/, "");
 
 function tokenFor(kind: "admin" | "store"): string {
   return kind === "admin" ? ADMIN_BOT_TOKEN : STORE_BOT_TOKEN;
@@ -17,6 +18,17 @@ function apiUrl(kind: "admin" | "store", method: string): string | null {
 
 export function getTelegramWebhookSecret(): string {
   return WEBHOOK_SECRET;
+}
+
+export function getTelegramConfigStatus() {
+  const webhookPath = "/api/telegram/admin/callback";
+  return {
+    adminBotTokenConfigured: !!ADMIN_BOT_TOKEN,
+    storeBotTokenConfigured: !!STORE_BOT_TOKEN,
+    adminChatIdConfigured: !!ADMIN_CHAT_ID,
+    webhookSecretConfigured: !!WEBHOOK_SECRET,
+    webhookUrl: PUBLIC_API_BASE ? `${PUBLIC_API_BASE}${webhookPath}` : "",
+  };
 }
 
 export async function sendTelegramMessage(

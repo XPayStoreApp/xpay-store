@@ -25,7 +25,7 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { requireAdmin } from "../lib/adminAuth.js";
 import { getAdapter } from "../lib/adapter-registry"; 
 import { MersalAdapter } from "../lib/mersal-adapter";
-import { notifyUserDepositApproved, notifyUserDepositRejected } from "../lib/telegram.js";
+import { getTelegramConfigStatus, notifyUserDepositApproved, notifyUserDepositRejected } from "../lib/telegram.js";
 const router: IRouter = Router();
 const EXTERNAL_CATEGORY_NAME = "External Provider";
 const EXTERNAL_CATEGORY_IMAGE = "https://placehold.co/600x400?text=External+Provider";
@@ -1331,6 +1331,10 @@ router.put("/admin/settings/items", requireAdmin, async (req, res) => {
   }
   res.json({ ok: true });
 }); 
+
+router.get("/admin/telegram/config-status", requireAdmin, async (_req, res) => {
+  res.json(getTelegramConfigStatus());
+});
 
 // ========== PROVIDER SYNC (UPDATED – لا يضيف منتجات جديدة) ==========
 router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
