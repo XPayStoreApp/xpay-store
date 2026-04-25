@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, productsTable, providersTable } from "@workspace/db";
+import { db, ordersTable, productsTable, providersTable, usersTable } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@workspace/api-zod";
 import { getOrCreateCurrentUser } from "../lib/currentUser.js";
 import { getAdapter } from "../lib/adapter-registry";
+import { notifyUserOrderCreated } from "../lib/telegram.js";
 
 const router: IRouter = Router();
 
@@ -31,7 +32,7 @@ function rowToOrder(o: typeof ordersTable.$inferSelect, p: typeof productsTable.
 }
 
 router.get("/orders", async (req, res) => {
-  const user = await getOrCreateCurrentUser();
+  const user = await getOrCreateCurrentUser(req);
   const status = (req.query.status as string | undefined) ?? "all";
   const conds = [eq(ordersTable.userId, user.id)];
   if (status && status !== "all") conds.push(eq(ordersTable.status, status));
@@ -45,7 +46,7 @@ router.get("/orders", async (req, res) => {
 });
 
 router.get("/orders/summary", async (_req, res) => {
-  const user = await getOrCreateCurrentUser();
+  const user = await getOrCreateCurrentUser(_req);
   const all = await db
     .select({
       total: sql<number>`coalesce(sum(case when status='accept' then total_usd else 0 end), 0)::float`,
@@ -67,7 +68,7 @@ router.get("/orders/summary", async (_req, res) => {
 });
 
 router.get("/orders/:id", async (req, res) => {
-  const user = await getOrCreateCurrentUser();
+  const user = await getOrCreateCurrentUser(req);
   const id = Number(req.params.id);
   const rows = await db
     .select({ o: ordersTable, p: productsTable })
@@ -84,7 +85,7 @@ router.get("/orders/:id", async (req, res) => {
 
 router.post("/orders", async (req, res) => {
   const body = CreateOrderBody.parse(req.body);
-  const user = await getOrCreateCurrentUser();
+  const user = await getOrCreateCurrentUser(req);
   const product = (
     await db.select().from(productsTable).where(eq(productsTable.id, Number(body.productId))).limit(1)
   )[0];
@@ -149,7 +150,13 @@ router.post("/orders", async (req, res) => {
     ? providerOrderResult.price
     : Number(product.priceUsd) * body.quantity;
   const totalSyp = Number(product.priceSyp) * body.quantity;
-  const orderNumber = `XP-${Date.now().toString().slice(-8)}`;
+  const orderNumber = `ID_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+
+  const balanceBeforeUsd = Number(user.balanceUsd);
+  if (balanceBeforeUsd < totalUsd) {
+    res.status(400).json({ error: "رصيدك غير كافٍ لإتمام الطلب" });
+    return;
+  }
 
   const meta: any = {};
   if (providerOrderResult) {
@@ -162,22 +169,52 @@ router.post("/orders", async (req, res) => {
     };
   }
 
-  const inserted = await db
-    .insert(ordersTable)
-    .values({
-      orderNumber,
-      userId: user.id,
-      productId: product.id,
-      quantity: String(body.quantity),
-      userIdentifier: body.userIdentifier ?? null,
-      totalUsd: String(totalUsd),
-      totalSyp: String(totalSyp),
-      status: providerOrderResult?.status || "wait",
-      meta,
-    })
-    .returning();
+  const inserted = await db.transaction(async (tx) => {
+    const [updatedUser] = await tx
+      .update(usersTable)
+      .set({
+        balanceUsd: sql`${usersTable.balanceUsd} - ${String(totalUsd)}`,
+        balanceSyp: sql`${usersTable.balanceSyp} - ${String(totalSyp)}`,
+      })
+      .where(eq(usersTable.id, user.id))
+      .returning();
+    if (!updatedUser) throw new Error("user_not_found");
+
+    return tx
+      .insert(ordersTable)
+      .values({
+        orderNumber,
+        userId: user.id,
+        productId: product.id,
+        quantity: String(body.quantity),
+        userIdentifier: body.userIdentifier ?? null,
+        totalUsd: String(totalUsd),
+        totalSyp: String(totalSyp),
+        status: providerOrderResult?.status || "wait",
+        meta,
+      })
+      .returning();
+  });
 
   const o = inserted[0]!;
+  const playerId = body.userIdentifier || `user_${user.id}`;
+  const balanceAfterUsd = balanceBeforeUsd - totalUsd;
+  try {
+    await notifyUserOrderCreated({
+      telegramId: user.telegramId,
+      productName: product.name,
+      priceUsd: totalUsd,
+      balanceBefore: balanceBeforeUsd,
+      balanceAfter: balanceAfterUsd,
+      orderNumber,
+      playerId,
+      status: providerOrderResult?.status || "wait",
+      details: providerOrderResult?.status === "accept" ? "تمت بنجاح" : "انتظر قليلا",
+    });
+  } catch (error) {
+    console.error("Notify order user failed:", error);
+  }
+
   res.json(CreateOrderResponse.parse(rowToOrder(o, product)));
 });
 

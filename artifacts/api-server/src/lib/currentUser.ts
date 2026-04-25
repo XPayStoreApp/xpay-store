@@ -1,21 +1,66 @@
+import type { Request } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 const DEFAULT_TELEGRAM_ID = "8333183867";
 const DEFAULT_USERNAME = "XPayUser";
 
-export async function getOrCreateCurrentUser() {
+function normalizeUsername(input?: string | null): string {
+  const raw = (input || "").trim();
+  if (!raw) return DEFAULT_USERNAME;
+  return raw.slice(0, 64);
+}
+
+function readTelegramIdentity(req?: Request): { telegramId: string; username: string } {
+  const hdr = req?.headers || {};
+  const tgIdRaw =
+    (hdr["x-telegram-id"] as string | undefined) ||
+    (req?.query?.["tg_id"] as string | undefined) ||
+    DEFAULT_TELEGRAM_ID;
+  const usernameRaw =
+    (hdr["x-telegram-username"] as string | undefined) ||
+    [hdr["x-telegram-first-name"], hdr["x-telegram-last-name"]]
+      .filter(Boolean)
+      .join(" ") ||
+    DEFAULT_USERNAME;
+
+  return {
+    telegramId: String(tgIdRaw).trim(),
+    username: normalizeUsername(String(usernameRaw)),
+  };
+}
+
+export function getShortAccountId(telegramId: string): string {
+  const digits = String(telegramId).replace(/\D/g, "");
+  const n = digits ? Number(digits.slice(-10)) : 0;
+  const short = ((n % 9000) + 1000).toString();
+  return short.padStart(4, "0");
+}
+
+export async function getOrCreateCurrentUser(req?: Request) {
+  const identity = readTelegramIdentity(req);
   const existing = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.telegramId, DEFAULT_TELEGRAM_ID))
+    .where(eq(usersTable.telegramId, identity.telegramId))
     .limit(1);
-  if (existing.length > 0) return existing[0]!;
+  if (existing.length > 0) {
+    const current = existing[0]!;
+    if (!current.username || current.username === DEFAULT_USERNAME) {
+      const [updated] = await db
+        .update(usersTable)
+        .set({ username: identity.username })
+        .where(eq(usersTable.id, current.id))
+        .returning();
+      return updated ?? current;
+    }
+    return current;
+  }
   const inserted = await db
     .insert(usersTable)
     .values({
-      telegramId: DEFAULT_TELEGRAM_ID,
-      username: DEFAULT_USERNAME,
+      telegramId: identity.telegramId,
+      username: identity.username,
       balanceUsd: "0",
       balanceSyp: "0",
       role: "user",

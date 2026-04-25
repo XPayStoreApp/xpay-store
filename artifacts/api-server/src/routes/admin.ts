@@ -25,6 +25,7 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { requireAdmin } from "../lib/adminAuth.js";
 import { getAdapter } from "../lib/adapter-registry"; 
 import { MersalAdapter } from "../lib/mersal-adapter";
+import { notifyUserDepositApproved, notifyUserDepositRejected } from "../lib/telegram.js";
 const router: IRouter = Router();
 const EXTERNAL_CATEGORY_NAME = "External Provider";
 const EXTERNAL_CATEGORY_IMAGE = "https://placehold.co/600x400?text=External+Provider";
@@ -109,6 +110,56 @@ async function getOrCreateExternalCategoryId(): Promise<number> {
     .returning({ id: categoriesTable.id });
 
   return created.id;
+}
+
+async function applyDepositStatusChange(id: number, status: string) {
+  const [dep] = await db.select().from(depositsTable).where(eq(depositsTable.id, id)).limit(1);
+  if (!dep) return { error: "not_found" as const };
+
+  if (status === "approved" && dep.status !== "approved") {
+    const col = dep.currency === "SYP" ? "balanceSyp" : "balanceUsd";
+    const amount = dep.currency === "SYP" ? dep.amountSyp : dep.amountUsd;
+    if (amount) {
+      await db
+        .update(usersTable)
+        .set({
+          [col]:
+            col === "balanceSyp"
+              ? sql`${usersTable.balanceSyp} + ${amount}`
+              : sql`${usersTable.balanceUsd} + ${amount}`,
+        })
+        .where(eq(usersTable.id, dep.userId));
+    }
+  }
+
+  const [updated] = await db
+    .update(depositsTable)
+    .set({ status })
+    .where(eq(depositsTable.id, id))
+    .returning();
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, dep.userId)).limit(1);
+  if (user) {
+    try {
+      if (status === "approved") {
+        await notifyUserDepositApproved({
+          telegramId: user.telegramId,
+          addedUsd: Number(dep.amountUsd),
+          currentUsd: Number(user.balanceUsd),
+          operationNumber: String(dep.id),
+        });
+      } else if (status === "rejected") {
+        await notifyUserDepositRejected({
+          telegramId: user.telegramId,
+          operationNumber: String(dep.id),
+        });
+      }
+    } catch (error) {
+      console.error("Notify deposit user failed:", error);
+    }
+  }
+
+  return { updated };
 }
 
 async function logActivity(
@@ -684,38 +735,18 @@ router.get("/admin/deposits", requireAdmin, async (req, res) => {
 router.post("/admin/deposits/:id/status", requireAdmin, async (req, res) => {
   const { status, note } = req.body as { status: string; note?: string };
   const id = Number(req.params.id);
-  const [dep] = await db.select().from(depositsTable).where(eq(depositsTable.id, id)).limit(1);
-  if (!dep) {
+  const result = await applyDepositStatusChange(id, status);
+  if ("error" in result) {
     res.status(404).json({ error: "غير موجود" });
     return;
   }
-  if (status === "approved" && dep.status !== "approved") {
-    const col = dep.currency === "SYP" ? "balanceSyp" : "balanceUsd";
-    const amount = dep.currency === "SYP" ? dep.amountSyp : dep.amountUsd;
-    if (amount) {
-      await db
-        .update(usersTable)
-        .set({
-          [col]:
-            col === "balanceSyp"
-              ? sql`${usersTable.balanceSyp} + ${amount}`
-              : sql`${usersTable.balanceUsd} + ${amount}`,
-        })
-        .where(eq(usersTable.id, dep.userId));
-    }
-  }
-  const [updated] = await db
-    .update(depositsTable)
-    .set({ status })
-    .where(eq(depositsTable.id, id))
-    .returning();
   await logActivity(
     { id: req.session.adminId, name: req.session.adminUsername },
     "deposit_status",
     String(id),
     { status, note },
   );
-  res.json(updated);
+  res.json(result.updated);
 });
 
 // ========== SETTINGS ==========
@@ -1018,42 +1049,18 @@ router.patch("/admin/orders/:id/status", requireAdmin, async (req, res) => {
 router.patch("/admin/deposits/:id/status", requireAdmin, async (req, res) => {
   const { status } = req.body as { status: string };
   const id = Number(req.params.id);
-  const [dep] = await db
-    .select()
-    .from(depositsTable)
-    .where(eq(depositsTable.id, id))
-    .limit(1);
-  if (!dep) {
+  const result = await applyDepositStatusChange(id, status);
+  if ("error" in result) {
     res.status(404).json({ error: "غير موجود" });
     return;
   }
-  if (status === "approved" && dep.status !== "approved") {
-    const col = dep.currency === "SYP" ? "balanceSyp" : "balanceUsd";
-    const amount = dep.currency === "SYP" ? dep.amountSyp : dep.amountUsd;
-    if (amount) {
-      await db
-        .update(usersTable)
-        .set({
-          [col]:
-            col === "balanceSyp"
-              ? sql`${usersTable.balanceSyp} + ${amount}`
-              : sql`${usersTable.balanceUsd} + ${amount}`,
-        })
-        .where(eq(usersTable.id, dep.userId));
-    }
-  }
-  const [updated] = await db
-    .update(depositsTable)
-    .set({ status })
-    .where(eq(depositsTable.id, id))
-    .returning();
   await logActivity(
     { id: req.session.adminId, name: req.session.adminUsername },
     "deposit_status",
     String(id),
     { status },
   );
-  res.json(updated);
+  res.json(result.updated);
 });
 
 // ========== GENERIC PUT FOR ALL CRUDS (ALIAS OF PATCH) ==========

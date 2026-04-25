@@ -8,6 +8,7 @@ import {
   ListMyDepositsResponse,
 } from "@workspace/api-zod";
 import { getOrCreateCurrentUser } from "../lib/currentUser.js";
+import { notifyAdminsAboutDeposit } from "../lib/telegram.js";
 
 const router: IRouter = Router();
 
@@ -26,7 +27,7 @@ function rowToDeposit(d: typeof depositsTable.$inferSelect) {
 }
 
 router.get("/deposits", async (req, res) => {
-  const user = await getOrCreateCurrentUser();
+  const user = await getOrCreateCurrentUser(req);
   const status = (req.query.status as string | undefined) ?? "all";
   const method = (req.query.method as string | undefined) ?? "all";
   const conds = [eq(depositsTable.userId, user.id)];
@@ -41,7 +42,7 @@ router.get("/deposits", async (req, res) => {
 });
 
 router.get("/deposits/summary", async (_req, res) => {
-  const user = await getOrCreateCurrentUser();
+  const user = await getOrCreateCurrentUser(_req);
   const all = await db
     .select({
       total: sql<number>`coalesce(sum(case when status='approved' then amount_usd else 0 end), 0)::float`,
@@ -64,7 +65,7 @@ router.get("/deposits/summary", async (_req, res) => {
 
 router.post("/deposits", async (req, res) => {
   const body = CreateDepositBody.parse(req.body);
-  const user = await getOrCreateCurrentUser();
+  const user = await getOrCreateCurrentUser(req);
   const m = (await db.select().from(paymentMethodsTable).where(eq(paymentMethodsTable.code, body.method)).limit(1))[0];
   const methodLabel = m?.name ?? body.method;
   const amountUsd =
@@ -83,7 +84,21 @@ router.post("/deposits", async (req, res) => {
       status: "pending",
     })
     .returning();
-  res.json(CreateDepositResponse.parse(rowToDeposit(inserted[0]!)));
+  const dep = inserted[0]!;
+  try {
+    await notifyAdminsAboutDeposit({
+      depositId: dep.id,
+      amount: body.amount,
+      currency: body.currency,
+      telegramId: user.telegramId,
+      username: user.username,
+      transactionId: body.transactionId,
+      proofImage: null,
+    });
+  } catch (error) {
+    console.error("Notify admins about deposit failed:", error);
+  }
+  res.json(CreateDepositResponse.parse(rowToDeposit(dep)));
 });
 
 export default router;

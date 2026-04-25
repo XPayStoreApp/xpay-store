@@ -18,6 +18,24 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 
+function readTelegramHeaders(): Record<string, string> {
+  try {
+    const w = globalThis as any;
+    const user = w?.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (!user?.id) return {};
+    return {
+      "x-telegram-id": String(user.id),
+      "x-telegram-username": String(
+        user.username || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "TelegramUser",
+      ),
+      "x-telegram-first-name": String(user.first_name || ""),
+      "x-telegram-last-name": String(user.last_name || ""),
+    };
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Set a base URL that is prepended to every relative request URL
  * (i.e. paths that start with `/`).
@@ -335,7 +353,11 @@ export async function customFetch<T = unknown>(
     throw new TypeError(`customFetch: ${method} requests cannot have a body.`);
   }
 
-  const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
+  const headers = mergeHeaders(
+    isRequest(input) ? input.headers : undefined,
+    readTelegramHeaders(),
+    headersInit,
+  );
 
   if (
     typeof init.body === "string" &&

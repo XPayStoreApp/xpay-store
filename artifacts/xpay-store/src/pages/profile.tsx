@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button";
 
 export default function Profile() {
   const { data: profile, isLoading } = useGetProfile();
+  const shortId = profile?.telegramId
+    ? (((Number(String(profile.telegramId).replace(/\D/g, "").slice(-10) || "0") % 9000) + 1000)
+        .toString()
+        .padStart(4, "0"))
+    : "---";
 
   if (isLoading) {
     return (
@@ -38,7 +43,10 @@ export default function Profile() {
           
           <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-4">
             <span className="bg-white/5 px-3 py-1 rounded-full border border-white/5 font-mono">
-              ID: {profile?.telegramId}
+              ID: {shortId}
+            </span>
+            <span className="bg-white/5 px-3 py-1 rounded-full border border-white/5 font-mono">
+              TG: {profile?.telegramId}
             </span>
             {profile?.role === 'admin' && (
               <span className="bg-primary/20 text-primary px-3 py-1 rounded-full border border-primary/20 text-xs font-bold flex items-center gap-1">

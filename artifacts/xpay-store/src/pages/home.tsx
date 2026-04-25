@@ -14,6 +14,11 @@ export default function Home() {
   const { data: categories, isLoading: categoriesLoading } = useListCategories();
 
   const [emblaRef] = useEmblaCarousel({ loop: true, direction: "rtl" }, [Autoplay({ delay: 3000 })]);
+  const shortId = profile?.telegramId
+    ? (((Number(String(profile.telegramId).replace(/\D/g, "").slice(-10) || "0") % 9000) + 1000)
+        .toString()
+        .padStart(4, "0"))
+    : "---";
 
   return (
     <div className="pb-8 animate-in fade-in duration-500">
@@ -37,7 +42,7 @@ export default function Home() {
             <div className="bg-card border border-white/5 rounded-full px-3 py-1.5 flex items-center gap-2 cursor-pointer">
               <span className="text-xs text-muted-foreground">ID:</span>
               <span className="text-xs font-mono font-medium text-foreground">
-                {profileLoading ? <Skeleton className="h-4 w-16" /> : profile?.telegramId || "---"}
+                {profileLoading ? <Skeleton className="h-4 w-16" /> : shortId}
               </span>
             </div>
           </Link>

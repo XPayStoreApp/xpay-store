@@ -4,8 +4,8 @@ import { getOrCreateCurrentUser } from "../lib/currentUser.js";
 
 const router: IRouter = Router();
 
-router.get("/me", async (_req, res) => {
-  const u = await getOrCreateCurrentUser();
+router.get("/me", async (req, res) => {
+  const u = await getOrCreateCurrentUser(req);
   const data = GetProfileResponse.parse({
     id: String(u.id),
     telegramId: u.telegramId,
