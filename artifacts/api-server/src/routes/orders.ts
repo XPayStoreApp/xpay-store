@@ -11,9 +11,140 @@ import {
 } from "@workspace/api-zod";
 import { getOrCreateCurrentUser } from "../lib/currentUser.js";
 import { getAdapter } from "../lib/adapter-registry";
-import { notifyUserOrderCreated } from "../lib/telegram.js";
+import { notifyUserOrderCreated, notifyUserOrderStatusChanged } from "../lib/telegram.js";
 
 const router: IRouter = Router();
+
+function normalizeProviderOrderStatus(status: string | null | undefined): "wait" | "accept" | "reject" {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (["accept", "accepted", "ok", "success", "completed", "paid", "done"].includes(normalized)) {
+    return "accept";
+  }
+  if (["reject", "rejected", "failed", "cancelled", "canceled", "error"].includes(normalized)) {
+    return "reject";
+  }
+  return "wait";
+}
+
+async function refundRejectedOrderIfNeeded(args: {
+  orderId: number;
+  userId: number;
+  totalUsd: number;
+  totalSyp: number;
+  meta: any;
+}): Promise<any> {
+  if (args.meta?.refund?.refundedAt) return args.meta;
+
+  await db
+    .update(usersTable)
+    .set({
+      balanceUsd: sql`${usersTable.balanceUsd} + ${String(args.totalUsd)}`,
+      balanceSyp: sql`${usersTable.balanceSyp} + ${String(args.totalSyp)}`,
+    })
+    .where(eq(usersTable.id, args.userId));
+
+  const nextMeta = {
+    ...args.meta,
+    refund: {
+      refunded: true,
+      refundedAt: new Date().toISOString(),
+      amountUsd: args.totalUsd,
+      amountSyp: args.totalSyp,
+    },
+  };
+
+  await db
+    .update(ordersTable)
+    .set({ meta: nextMeta })
+    .where(eq(ordersTable.id, args.orderId));
+
+  return nextMeta;
+}
+
+async function syncPendingProviderOrdersForUser(userId: number): Promise<void> {
+  const pendingRows = await db
+    .select({
+      order: ordersTable,
+      product: productsTable,
+      provider: providersTable,
+      user: usersTable,
+    })
+    .from(ordersTable)
+    .innerJoin(productsTable, eq(productsTable.id, ordersTable.productId))
+    .innerJoin(usersTable, eq(usersTable.id, ordersTable.userId))
+    .leftJoin(providersTable, eq(providersTable.id, productsTable.providerId))
+    .where(and(eq(ordersTable.userId, userId), eq(ordersTable.status, "wait")));
+
+  for (const row of pendingRows) {
+    const provider = row.provider;
+    const product = row.product;
+    const order = row.order;
+    const user = row.user;
+    const meta = (order.meta || {}) as any;
+    const providerOrderId = String(meta?.provider?.providerOrderId || "").trim();
+
+    if (!provider?.apiKey || !providerOrderId) continue;
+
+    const adapter = getAdapter(provider.providerType || "custom");
+    if (!adapter?.checkOrders) continue;
+
+    try {
+      const check = await adapter.checkOrders(
+        provider.apiKey,
+        provider.apiUrl || undefined,
+        [providerOrderId],
+      );
+
+      const remote = check.orders.find((item) => String(item.providerOrderId) === providerOrderId);
+      if (!remote) continue;
+
+      const nextStatus = normalizeProviderOrderStatus(remote.status);
+      if (nextStatus === "wait" || nextStatus === order.status) continue;
+
+      let nextMeta = {
+        ...meta,
+        provider: {
+          ...(meta?.provider || {}),
+          checkResponse: remote.rawData || null,
+          replayApi: remote.replayApi || meta?.provider?.replayApi || null,
+          status: remote.status,
+        },
+      };
+
+      await db
+        .update(ordersTable)
+        .set({
+          status: nextStatus,
+          meta: nextMeta,
+        })
+        .where(eq(ordersTable.id, order.id));
+
+      if (nextStatus === "reject") {
+        nextMeta = await refundRejectedOrderIfNeeded({
+          orderId: order.id,
+          userId: user.id,
+          totalUsd: Number(order.totalUsd),
+          totalSyp: Number(order.totalSyp),
+          meta: nextMeta,
+        });
+      }
+
+      try {
+        await notifyUserOrderStatusChanged({
+          telegramId: user.telegramId,
+          orderNumber: order.orderNumber,
+          productName: product.name,
+          status: nextStatus,
+          note: nextStatus === "accept" ? "تمت العملية بنجاح." : "تم رفض الطلب من المزود.",
+        });
+      } catch (error) {
+        console.error("Notify provider order status user failed:", error);
+      }
+    } catch (error) {
+      console.error(`Provider order sync failed for order ${order.id}:`, error);
+    }
+  }
+}
 
 function rowToOrder(o: typeof ordersTable.$inferSelect, p: typeof productsTable.$inferSelect | null) {
   return {
@@ -33,6 +164,7 @@ function rowToOrder(o: typeof ordersTable.$inferSelect, p: typeof productsTable.
 
 router.get("/orders", async (req, res) => {
   const user = await getOrCreateCurrentUser(req);
+  await syncPendingProviderOrdersForUser(user.id);
   const status = (req.query.status as string | undefined) ?? "all";
   const conds = [eq(ordersTable.userId, user.id)];
   if (status && status !== "all") conds.push(eq(ordersTable.status, status));
@@ -47,6 +179,7 @@ router.get("/orders", async (req, res) => {
 
 router.get("/orders/summary", async (_req, res) => {
   const user = await getOrCreateCurrentUser(_req);
+  await syncPendingProviderOrdersForUser(user.id);
   const all = await db
     .select({
       total: sql<number>`coalesce(sum(case when status='accept' then total_usd else 0 end), 0)::float`,
@@ -69,6 +202,7 @@ router.get("/orders/summary", async (_req, res) => {
 
 router.get("/orders/:id", async (req, res) => {
   const user = await getOrCreateCurrentUser(req);
+  await syncPendingProviderOrdersForUser(user.id);
   const id = Number(req.params.id);
   const rows = await db
     .select({ o: ordersTable, p: productsTable })
@@ -200,16 +334,8 @@ router.post("/orders", async (req, res) => {
     return;
   }
 
-  const normalizedProviderStatus = String(providerOrderResult?.status || "").toLowerCase();
-  const providerAccepted =
-    !!providerOrderResult?.success &&
-    ["accept", "accepted", "ok", "success", "completed", "paid"].includes(normalizedProviderStatus);
-
-  // Auto-accept as requested when amount and quantity are valid.
   const finalOrderStatus = product.providerId
-    ? providerAccepted
-      ? "accept"
-      : providerOrderResult?.status || "wait"
+    ? normalizeProviderOrderStatus(providerOrderResult?.status)
     : "accept";
 
   const meta: any = {
@@ -257,8 +383,18 @@ router.post("/orders", async (req, res) => {
   });
 
   const o = inserted[0]!;
+  let finalMeta = meta;
+  if (finalOrderStatus === "reject") {
+    finalMeta = await refundRejectedOrderIfNeeded({
+      orderId: o.id,
+      userId: user.id,
+      totalUsd,
+      totalSyp,
+      meta,
+    });
+  }
   const playerId = body.userIdentifier || `user_${user.id}`;
-  const balanceAfterUsd = balanceBeforeUsd - totalUsd;
+  const balanceAfterUsd = finalOrderStatus === "reject" ? balanceBeforeUsd : balanceBeforeUsd - totalUsd;
   try {
     await notifyUserOrderCreated({
       telegramId: user.telegramId,
@@ -275,7 +411,7 @@ router.post("/orders", async (req, res) => {
     console.error("Notify order user failed:", error);
   }
 
-  res.json(CreateOrderResponse.parse(rowToOrder(o, product)));
+  res.json(CreateOrderResponse.parse(rowToOrder({ ...o, meta: finalMeta }, product)));
 });
 
 export default router;
