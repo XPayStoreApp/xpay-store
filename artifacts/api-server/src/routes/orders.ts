@@ -86,11 +86,26 @@ router.get("/orders/:id", async (req, res) => {
 router.post("/orders", async (req, res) => {
   const body = CreateOrderBody.parse(req.body);
   const user = await getOrCreateCurrentUser(req);
+
   const product = (
     await db.select().from(productsTable).where(eq(productsTable.id, Number(body.productId))).limit(1)
   )[0];
   if (!product) {
     res.status(404).json({ error: "product_not_found" });
+    return;
+  }
+
+  // Validate quantity against dashboard limits first.
+  if (body.quantity <= 0) {
+    res.status(400).json({ error: "الكمية يجب أن تكون أكبر من صفر" });
+    return;
+  }
+  if (product.minQty && body.quantity < Number(product.minQty)) {
+    res.status(400).json({ error: `الحد الأدنى هو ${Number(product.minQty)}` });
+    return;
+  }
+  if (product.maxQty && body.quantity > Number(product.maxQty)) {
+    res.status(400).json({ error: `الحد الأعلى هو ${Number(product.maxQty)}` });
     return;
   }
 
@@ -104,7 +119,9 @@ router.post("/orders", async (req, res) => {
     error?: string;
   } | null = null;
 
-  // --- تكامل المزود الخارجي ---
+  let liveProviderUnitPrice = 0;
+  let providerAvailable: boolean | null = null;
+
   if (product.providerId) {
     const [provider] = await db
       .select()
@@ -123,9 +140,35 @@ router.post("/orders", async (req, res) => {
       return;
     }
 
+    // 1) Read live provider product details (price/availability/qty range).
+    try {
+      const providerProducts = await adapter.fetchProducts(provider.apiKey!, provider.apiUrl || undefined);
+      const providerProduct = providerProducts.find((p) => String(p.id) === String(product.providerProductId || ""));
+      if (providerProduct) {
+        liveProviderUnitPrice = Number(providerProduct.price || 0);
+        providerAvailable = !!providerProduct.available;
+
+        if (providerProduct.minQty != null && body.quantity < Number(providerProduct.minQty)) {
+          res.status(400).json({ error: `الحد الأدنى لدى المزود هو ${Number(providerProduct.minQty)}` });
+          return;
+        }
+        if (providerProduct.maxQty != null && body.quantity > Number(providerProduct.maxQty)) {
+          res.status(400).json({ error: `الحد الأعلى لدى المزود هو ${Number(providerProduct.maxQty)}` });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Provider live price lookup failed:", error);
+    }
+
+    if (providerAvailable === false) {
+      res.status(400).json({ error: "المنتج غير متوفر حاليا لدى المزود" });
+      return;
+    }
+
+    // 2) Place provider order.
     const orderUuid = randomUUID();
     const playerId = body.userIdentifier || `user_${user.id}`;
-
     try {
       providerOrderResult = await adapter.placeOrder(
         provider.apiKey!,
@@ -133,22 +176,29 @@ router.post("/orders", async (req, res) => {
         product.providerProductId!,
         body.quantity,
         playerId,
-        orderUuid
+        orderUuid,
       );
     } catch (error: any) {
-      console.error("🔥 Provider order error:", error);
-      // نستمر بإنشاء الطلب المحلي بحالة wait مع تسجيل الخطأ
+      console.error("Provider order error:", error);
       providerOrderResult = {
         success: false,
         error: error.message || "فشل الاتصال بالمزود",
       };
     }
   }
-  // --------------------------
 
-  const totalUsd = providerOrderResult?.price
-    ? providerOrderResult.price
-    : Number(product.priceUsd) * body.quantity;
+  // 3) Final price = provider live price + dashboard configured price.
+  // For non-provider products, keep dashboard price only.
+  const dashboardUnitPriceUsd = Number(product.priceUsd);
+  const providerUnitPriceUsd =
+    product.providerId
+      ? liveProviderUnitPrice || (providerOrderResult?.price ? Number(providerOrderResult.price) / body.quantity : 0)
+      : 0;
+  const finalUnitPriceUsd = product.providerId
+    ? providerUnitPriceUsd + dashboardUnitPriceUsd
+    : dashboardUnitPriceUsd;
+
+  const totalUsd = finalUnitPriceUsd * body.quantity;
   const totalSyp = Number(product.priceSyp) * body.quantity;
   const orderNumber = `ID_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 
@@ -158,7 +208,25 @@ router.post("/orders", async (req, res) => {
     return;
   }
 
-  const meta: any = {};
+  const normalizedProviderStatus = String(providerOrderResult?.status || "").toLowerCase();
+  const providerAccepted =
+    !!providerOrderResult?.success &&
+    ["accept", "accepted", "ok", "success", "completed", "paid"].includes(normalizedProviderStatus);
+
+  // Auto-accept as requested when amount and quantity are valid.
+  const finalOrderStatus = product.providerId
+    ? providerAccepted
+      ? "accept"
+      : providerOrderResult?.status || "wait"
+    : "accept";
+
+  const meta: any = {
+    pricing: {
+      providerUnitPriceUsd,
+      dashboardUnitPriceUsd,
+      finalUnitPriceUsd,
+    },
+  };
   if (providerOrderResult) {
     meta.provider = {
       providerOrderId: providerOrderResult.providerOrderId,
@@ -190,7 +258,7 @@ router.post("/orders", async (req, res) => {
         userIdentifier: body.userIdentifier ?? null,
         totalUsd: String(totalUsd),
         totalSyp: String(totalSyp),
-        status: providerOrderResult?.status || "wait",
+        status: finalOrderStatus,
         meta,
       })
       .returning();
@@ -208,8 +276,8 @@ router.post("/orders", async (req, res) => {
       balanceAfter: balanceAfterUsd,
       orderNumber,
       playerId,
-      status: providerOrderResult?.status || "wait",
-      details: providerOrderResult?.status === "accept" ? "تمت بنجاح" : "انتظر قليلا",
+      status: finalOrderStatus,
+      details: finalOrderStatus === "accept" ? "تمت بنجاح" : "انتظر قليلا",
     });
   } catch (error) {
     console.error("Notify order user failed:", error);
