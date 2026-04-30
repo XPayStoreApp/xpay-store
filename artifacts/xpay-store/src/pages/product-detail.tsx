@@ -49,6 +49,12 @@ export default function ProductDetail() {
   const [accountId, setAccountId] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
 
+  useEffect(() => {
+    if (!product) return;
+    const min = Number(product.minQty || 1);
+    setQuantity(min);
+  }, [product?.id, product?.minQty]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -72,11 +78,6 @@ export default function ProductDetail() {
   const totalUsd = product.priceUsd * quantity;
   const totalSyp = product.priceSyp * quantity;
   const isAppsPurchase = purchaseMode === "apps";
-
-  useEffect(() => {
-    const min = Number(product.minQty || 1);
-    setQuantity(min);
-  }, [product.id, product.minQty]);
 
   const handleQtyInputChange = (value: string) => {
     const parsed = Number(value);
