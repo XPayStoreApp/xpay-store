@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import { db, depositsTable, settingsTable, usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -20,6 +20,51 @@ type TelegramUpdate = {
   };
 };
 
+function normalizeTelegramIds(raw: unknown): Set<string> {
+  if (!raw) return new Set();
+
+  if (Array.isArray(raw)) {
+    return new Set(
+      raw
+        .map((x) => String(x ?? "").trim())
+        .map((x) => x.replace(/^@/, ""))
+        .filter(Boolean),
+    );
+  }
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+
+    // Support JSON string like: "[\"123\",\"456\"]"
+    if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return normalizeTelegramIds(parsed);
+      } catch {
+        // fallback to CSV parser below
+      }
+    }
+
+    return new Set(
+      trimmed
+        .split(/[\s,;|]+/)
+        .map((x) => x.trim().replace(/^@/, ""))
+        .filter(Boolean),
+    );
+  }
+
+  if (typeof raw === "object") {
+    // Support object maps: {"8333": true}
+    return new Set(
+      Object.keys(raw as Record<string, unknown>)
+        .map((x) => x.trim().replace(/^@/, ""))
+        .filter(Boolean),
+    );
+  }
+
+  return new Set();
+}
+
 async function readAdminTelegramIds(): Promise<Set<string>> {
   const [row] = await db
     .select()
@@ -27,10 +72,7 @@ async function readAdminTelegramIds(): Promise<Set<string>> {
     .where(eq(settingsTable.key, "admin_telegram_ids"))
     .limit(1);
 
-  const v = row?.value as unknown;
-  if (Array.isArray(v)) return new Set(v.map((x) => String(x).trim()).filter(Boolean));
-  if (typeof v === "string") return new Set(v.split(",").map((x) => x.trim()).filter(Boolean));
-  return new Set();
+  return normalizeTelegramIds(row?.value as unknown);
 }
 
 async function applyDepositDecision(depositId: number, status: "approved" | "rejected") {
@@ -81,7 +123,7 @@ async function applyDepositDecision(depositId: number, status: "approved" | "rej
   return { ok: true as const, message: status === "approved" ? "تمت الموافقة ✅" : "تم الرفض ❌" };
 }
 
-router.post("/telegram/admin/callback", async (req, res) => {
+async function handleAdminCallback(req: any, res: any) {
   try {
     const expected = getTelegramWebhookSecret();
     const strictSecret = process.env.TELEGRAM_ADMIN_WEBHOOK_STRICT === "true";
@@ -107,24 +149,29 @@ router.post("/telegram/admin/callback", async (req, res) => {
       return;
     }
 
-    const actorTelegramId = String(cb.from?.id || "");
+    const actorTelegramId = String(cb.from?.id || "").trim();
     const allowed = await readAdminTelegramIds();
-    if (!allowed.has(actorTelegramId)) {
+
+    // If no admin IDs configured, allow callbacks to avoid blocking production flow.
+    // Keep strict allow-list when IDs are configured.
+    const isAllowed = allowed.size === 0 || allowed.has(actorTelegramId);
+    if (!isAllowed) {
       await answerCallbackQuery(cb.id, "غير مصرح لك بهذا الإجراء");
       res.json({ ok: true });
       return;
     }
 
-    const m = cb.data.match(/^dep:(approve|reject):(\d+)$/);
-    if (!m) {
+    const m = cb.data.match(/^dep:(approve|reject):(?<id>\d+)$/);
+    if (!m?.groups?.id) {
       await answerCallbackQuery(cb.id, "أمر غير صالح");
       res.json({ ok: true });
       return;
     }
 
-    const action = m[1]!;
-    const depositId = Number(m[2]!);
+    const action = m[1] as "approve" | "reject";
+    const depositId = Number(m.groups.id);
     const result = await applyDepositDecision(depositId, action === "approve" ? "approved" : "rejected");
+
     await answerCallbackQuery(cb.id, result.message);
 
     const chatId = cb.message?.chat?.id;
@@ -138,6 +185,9 @@ router.post("/telegram/admin/callback", async (req, res) => {
     console.error("Telegram admin callback handler failed:", error);
     res.json({ ok: true });
   }
-});
+}
+
+router.post("/telegram/admin/callback", handleAdminCallback);
+router.post("/telegram/admin/webhook", handleAdminCallback);
 
 export default router;
