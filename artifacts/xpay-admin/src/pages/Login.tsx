@@ -16,7 +16,7 @@ export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
       const u = await post("/login", { username, password });
       onSuccess(u);
     } catch (e: any) {
-      setErr(e.message || "ظپط´ظ„ طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„");
+      setErr(e.message || "فشل تسجيل الدخول");
     } finally {
       setLoading(false);
     }
@@ -37,12 +37,13 @@ export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
             XP
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-4">XPayStore</h1>
-          <p className="text-sm text-slate-500 mt-1">ظ„ظˆط­ط© ط§ظ„ط¥ط¯ط§ط±ط©</p>
+          <p className="text-sm text-slate-500 mt-1">لوحة الإدارة</p>
         </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              ط§ط³ظ… ط§ظ„ظ…ط³طھط®ط¯ظ…
+              اسم المستخدم
             </label>
             <div className="relative">
               <User
@@ -58,9 +59,10 @@ export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
               />
             </div>
           </div>
+
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط±
+              كلمة المرور
             </label>
             <div className="relative">
               <Lock
@@ -73,24 +75,26 @@ export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="w-full border border-slate-300 rounded-lg pr-10 pl-3 py-2.5 text-sm"
-                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                placeholder="••••••••"
               />
             </div>
           </div>
+
           {err && (
             <div className="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm">
               {err}
             </div>
           )}
+
           <button
             type="submit"
             disabled={loading}
             className="w-full bg-brand-600 text-white font-bold py-2.5 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
           >
-            {loading ? "ط¬ط§ط±ظٹ ط§ظ„ط¯ط®ظˆظ„..." : "طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„"}
-          </button>        </form>
+            {loading ? "جاري الدخول..." : "تسجيل الدخول"}
+          </button>
+        </form>
       </div>
     </div>
   );
 }
-
