@@ -61,4 +61,11 @@ app.use(sessionMiddleware);
 app.use("/api", router);
 app.use("/api", adminRouter);
 
+app.use((err: any, _req: any, res: any, _next: any) => {
+  const status = Number(err?.statusCode || 500);
+  const message = err?.publicMessage || err?.message || "Internal Server Error";
+  if (status >= 500) console.error("Unhandled API error:", err);
+  res.status(status).json({ error: message });
+});
+
 export default app;

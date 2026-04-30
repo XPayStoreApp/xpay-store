@@ -32,18 +32,26 @@ export default function Home() {
               </span>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">مرحباً بك،</p>
+              <p className="text-xs text-muted-foreground">مرحبا بك في</p>
               <p className="text-sm font-bold text-foreground">
                 {profileLoading ? <Skeleton className="h-4 w-20" /> : profile?.username || "ضيف"}
               </p>
             </div>
           </div>
           <Link href="/profile">
-            <div className="bg-card border border-white/5 rounded-full px-3 py-1.5 flex items-center gap-2 cursor-pointer">
-              <span className="text-xs text-muted-foreground">ID:</span>
-              <span className="text-xs font-mono font-medium text-foreground">
-                {profileLoading ? <Skeleton className="h-4 w-16" /> : shortId}
-              </span>
+            <div className="bg-card border border-white/5 rounded-xl px-3 py-2 flex flex-col gap-1 cursor-pointer min-w-[150px]">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">ID:</span>
+                <span className="text-xs font-mono font-medium text-foreground">
+                  {profileLoading ? <Skeleton className="h-4 w-16" /> : (profile?.telegramId || "---")}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">ACC:</span>
+                <span className="text-xs font-mono font-bold text-primary">
+                  {profileLoading ? <Skeleton className="h-4 w-10" /> : shortId}
+                </span>
+              </div>
             </div>
           </Link>
         </div>

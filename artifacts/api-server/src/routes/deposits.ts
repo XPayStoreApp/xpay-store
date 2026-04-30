@@ -65,6 +65,10 @@ router.get("/deposits/summary", async (_req, res) => {
 
 router.post("/deposits", async (req, res) => {
   const body = CreateDepositBody.parse(req.body);
+  const proofImage =
+    typeof (req.body as any)?.proofImage === "string" && (req.body as any).proofImage.trim().length > 0
+      ? String((req.body as any).proofImage)
+      : null;
   const user = await getOrCreateCurrentUser(req);
   const m = (await db.select().from(paymentMethodsTable).where(eq(paymentMethodsTable.code, body.method)).limit(1))[0];
   const methodLabel = m?.name ?? body.method;
@@ -93,7 +97,7 @@ router.post("/deposits", async (req, res) => {
       telegramId: user.telegramId,
       username: user.username,
       transactionId: body.transactionId,
-      proofImage: null,
+      proofImage,
     });
   } catch (error) {
     console.error("Notify admins about deposit failed:", error);

@@ -19,17 +19,50 @@ let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 
 function readTelegramHeaders(): Record<string, string> {
+  const fromInitData = () => {
+    try {
+      const search = new URLSearchParams(globalThis?.location?.search || "");
+      const hashRaw = String(globalThis?.location?.hash || "").replace(/^#/, "");
+      const hash = new URLSearchParams(hashRaw);
+      const webAppData = search.get("tgWebAppData") || hash.get("tgWebAppData");
+      if (!webAppData) return null;
+
+      const init = new URLSearchParams(webAppData);
+      const userRaw = init.get("user");
+      if (!userRaw) return null;
+      const user = JSON.parse(userRaw);
+      if (!user?.id) return null;
+      return {
+        id: String(user.id),
+        username: String(user.username || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "TelegramUser"),
+        firstName: String(user.first_name || ""),
+        lastName: String(user.last_name || ""),
+      };
+    } catch {
+      return null;
+    }
+  };
+
   try {
     const w = globalThis as any;
-    const user = w?.Telegram?.WebApp?.initDataUnsafe?.user;
-    if (!user?.id) return {};
+    const tgUser = w?.Telegram?.WebApp?.initDataUnsafe?.user;
+    const parsed = tgUser?.id
+      ? {
+          id: String(tgUser.id),
+          username: String(
+            tgUser.username || `${tgUser.first_name || ""} ${tgUser.last_name || ""}`.trim() || "TelegramUser",
+          ),
+          firstName: String(tgUser.first_name || ""),
+          lastName: String(tgUser.last_name || ""),
+        }
+      : fromInitData();
+    if (!parsed?.id) return {};
+
     return {
-      "x-telegram-id": String(user.id),
-      "x-telegram-username": String(
-        user.username || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "TelegramUser",
-      ),
-      "x-telegram-first-name": String(user.first_name || ""),
-      "x-telegram-last-name": String(user.last_name || ""),
+      "x-telegram-id": parsed.id,
+      "x-telegram-username": parsed.username,
+      "x-telegram-first-name": parsed.firstName,
+      "x-telegram-last-name": parsed.lastName,
     };
   } catch {
     return {};

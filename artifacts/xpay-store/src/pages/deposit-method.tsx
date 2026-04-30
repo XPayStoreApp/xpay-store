@@ -1,5 +1,5 @@
 import { useRoute, Link, useLocation } from "wouter";
-import { ChevronRight, Copy, AlertTriangle, ArrowLeftRight } from "lucide-react";
+import { ChevronRight, Copy, AlertTriangle } from "lucide-react";
 import { useListPaymentMethods, useCreateDeposit, getListPaymentMethodsQueryKey } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ const depositSchema = z.object({
   currency: z.enum(["USD", "SYP"]),
   amount: z.coerce.number().positive("المبلغ يجب أن يكون أكبر من صفر"),
   transactionId: z.string().min(3, "رقم العملية مطلوب"),
+  proofImage: z.string().optional(),
 });
 
 export default function DepositMethod() {
@@ -26,12 +27,13 @@ export default function DepositMethod() {
   const queryClient = useQueryClient();
 
   const { data: methods, isLoading } = useListPaymentMethods({
-    query: { queryKey: getListPaymentMethodsQueryKey() }
+    query: { queryKey: getListPaymentMethodsQueryKey() },
   });
 
   const createDeposit = useCreateDeposit();
+  const [proofImageName, setProofImageName] = useState("");
 
-  const method = methods?.find(m => m.code === methodCode);
+  const method = methods?.find((m) => m.code === methodCode);
 
   const form = useForm<z.infer<typeof depositSchema>>({
     resolver: zodResolver(depositSchema),
@@ -39,32 +41,49 @@ export default function DepositMethod() {
       currency: methodCode?.includes("syriatel") || methodCode?.includes("mtn") ? "SYP" : "USD",
       amount: 0,
       transactionId: "",
+      proofImage: "",
     },
   });
 
+  const onProofFileChange = (file?: File) => {
+    if (!file) {
+      form.setValue("proofImage", "");
+      setProofImageName("");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = typeof reader.result === "string" ? reader.result : "";
+      form.setValue("proofImage", base64);
+      setProofImageName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const onSubmit = (values: z.infer<typeof depositSchema>) => {
     if (!method) return;
-    
+
     createDeposit.mutate(
       {
         data: {
           method: method.code,
           currency: values.currency,
           amount: values.amount,
-          transactionId: values.transactionId
-        }
+          transactionId: values.transactionId,
+          proofImage: values.proofImage || undefined,
+        } as any,
       },
       {
         onSuccess: () => {
-          toast.success("تم إرسال طلب الشحن بنجاح");
+          toast.success("تم إرسال طلب الإيداع بنجاح");
           queryClient.invalidateQueries({ queryKey: ["/api/me"] });
           queryClient.invalidateQueries({ queryKey: ["/api/deposits"] });
           setLocation("/deposits");
         },
         onError: (err: any) => {
-          toast.error(err.response?.data?.message || "حدث خطأ أثناء الطلب");
-        }
-      }
+          toast.error(err.response?.data?.message || "حدث خطأ أثناء الإرسال");
+        },
+      },
     );
   };
 
@@ -87,36 +106,50 @@ export default function DepositMethod() {
     return <div className="p-4 text-center mt-20 text-muted-foreground">طريقة الدفع غير موجودة</div>;
   }
 
-  // Visual theming per method
-  const isSham = methodCode === 'sham_cash';
-  const isSyriatel = methodCode === 'syriatel_cash';
-  const isMtn = methodCode === 'mtn_cash';
-  const isBinance = methodCode === 'binance_pay';
-  const isUsdt = methodCode === 'usdt_auto';
+  const isSyriatel = methodCode === "syriatel_cash";
+  const isMtn = methodCode === "mtn_cash";
+  const isBinance = methodCode === "binance_pay";
+  const isUsdt = methodCode === "usdt_auto";
 
-  const themeColor = isSyriatel ? "text-[#E31837]" : 
-                     isMtn ? "text-[#FFCC00]" : 
-                     isBinance ? "text-[#FCD535]" : 
-                     isUsdt ? "text-[#26A17B]" : 
-                     "text-primary";
-                     
-  const themeBg = isSyriatel ? "bg-[#E31837]" : 
-                  isMtn ? "bg-[#FFCC00]" : 
-                  isBinance ? "bg-[#FCD535]" : 
-                  isUsdt ? "bg-[#26A17B]" : 
-                  "bg-primary";
+  const themeColor = isSyriatel
+    ? "text-[#E31837]"
+    : isMtn
+      ? "text-[#FFCC00]"
+      : isBinance
+        ? "text-[#FCD535]"
+        : isUsdt
+          ? "text-[#26A17B]"
+          : "text-primary";
 
-  const themeBgLight = isSyriatel ? "bg-[#E31837]/10" : 
-                       isMtn ? "bg-[#FFCC00]/10" : 
-                       isBinance ? "bg-[#FCD535]/10" : 
-                       isUsdt ? "bg-[#26A17B]/10" : 
-                       "bg-primary/10";
+  const themeBg = isSyriatel
+    ? "bg-[#E31837]"
+    : isMtn
+      ? "bg-[#FFCC00]"
+      : isBinance
+        ? "bg-[#FCD535]"
+        : isUsdt
+          ? "bg-[#26A17B]"
+          : "bg-primary";
 
-  const themeBorder = isSyriatel ? "border-[#E31837]/20" : 
-                      isMtn ? "border-[#FFCC00]/20" : 
-                      isBinance ? "border-[#FCD535]/20" : 
-                      isUsdt ? "border-[#26A17B]/20" : 
-                      "border-primary/20";
+  const themeBgLight = isSyriatel
+    ? "bg-[#E31837]/10"
+    : isMtn
+      ? "bg-[#FFCC00]/10"
+      : isBinance
+        ? "bg-[#FCD535]/10"
+        : isUsdt
+          ? "bg-[#26A17B]/10"
+          : "bg-primary/10";
+
+  const themeBorder = isSyriatel
+    ? "border-[#E31837]/20"
+    : isMtn
+      ? "border-[#FFCC00]/20"
+      : isBinance
+        ? "border-[#FCD535]/20"
+        : isUsdt
+          ? "border-[#26A17B]/20"
+          : "border-primary/20";
 
   return (
     <div className="min-h-screen bg-background pb-24 animate-in slide-in-from-right-4 duration-300">
@@ -130,16 +163,12 @@ export default function DepositMethod() {
       </div>
 
       <div className="p-4 space-y-6 mt-2">
-        
-        {/* Instructions & Wallet Card */}
         <div className={`p-6 rounded-3xl border shadow-lg relative overflow-hidden ${themeBgLight} ${themeBorder}`}>
           <div className="relative z-10">
             <h2 className={`font-black text-xl mb-4 ${themeColor}`}>{method.subtitle}</h2>
-            
+
             {method.instructions && (
-              <p className="text-sm text-foreground/80 mb-6 leading-relaxed whitespace-pre-wrap">
-                {method.instructions}
-              </p>
+              <p className="text-sm text-foreground/80 mb-6 leading-relaxed whitespace-pre-wrap">{method.instructions}</p>
             )}
 
             {method.walletAddress && (
@@ -147,7 +176,7 @@ export default function DepositMethod() {
                 <div className="text-xs text-muted-foreground mb-2">عنوان المحفظة / الرقم:</div>
                 <div className="flex items-center justify-between gap-3">
                   <div className="font-mono text-sm font-bold truncate select-all">{method.walletAddress}</div>
-                  <button 
+                  <button
                     onClick={() => copyToClipboard(method.walletAddress!)}
                     className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${themeBgLight} ${themeColor}`}
                   >
@@ -156,7 +185,7 @@ export default function DepositMethod() {
                 </div>
               </div>
             )}
-            
+
             {method.qrImage && (
               <div className="mt-4 flex justify-center">
                 <img src={method.qrImage} alt="QR Code" className="w-32 h-32 rounded-xl border border-white/10" />
@@ -165,23 +194,19 @@ export default function DepositMethod() {
           </div>
         </div>
 
-        {/* Alerts */}
         <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-4 flex gap-3 text-destructive">
           <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
           <div className="text-xs leading-relaxed space-y-1 font-medium">
-            <p>• يرجى تحويل المبلغ بدقة كما هو مطلوب.</p>
-            <p>• لا تقم بإضافة أي ملاحظات عند التحويل لتجنب حظر حسابك.</p>
-            <p>• يجب إرسال رقم العملية الدقيق للتحقق.</p>
+            <p>يرجى إدخال رقم عملية صحيح أو رفع إيصال واضح.</p>
+            <p>الطلبات تُرسل مباشرة إلى مجموعة المشرفين للمراجعة.</p>
           </div>
         </div>
 
-        {/* Deposit Form */}
         <div className="bg-card border border-white/5 rounded-3xl p-5 shadow-lg">
           <h3 className="font-bold text-foreground mb-4">تفاصيل التحويل</h3>
-          
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              
               <FormField
                 control={form.control}
                 name="currency"
@@ -211,12 +236,7 @@ export default function DepositMethod() {
                   <FormItem>
                     <FormLabel>المبلغ المحول</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number"
-                        placeholder="أدخل المبلغ..." 
-                        {...field}
-                        className="h-12 bg-background border-white/5 rounded-xl text-base"
-                      />
+                      <Input type="number" placeholder="أدخل المبلغ..." {...field} className="h-12 bg-background border-white/5 rounded-xl text-base" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -230,11 +250,35 @@ export default function DepositMethod() {
                   <FormItem>
                     <FormLabel>رقم العملية (Transaction ID/Ref)</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="أدخل رقم عملية التحويل..." 
-                        {...field}
-                        className="h-12 bg-background border-white/5 rounded-xl text-base font-mono"
-                      />
+                      <Input placeholder="أدخل رقم عملية التحويل..." {...field} className="h-12 bg-background border-white/5 rounded-xl text-base font-mono" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="proofImage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>صورة الإيصال (اختياري)</FormLabel>
+                    <FormControl>
+                      <div className="space-y-2">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => onProofFileChange(e.target.files?.[0])}
+                          className="h-12 bg-background border-white/5 rounded-xl text-base"
+                        />
+                        <Input
+                          placeholder="أو رابط صورة الإيصال"
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          className="h-12 bg-background border-white/5 rounded-xl text-base"
+                        />
+                        {proofImageName ? <div className="text-xs text-muted-foreground">الملف المحدد: {proofImageName}</div> : null}
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -242,8 +286,8 @@ export default function DepositMethod() {
               />
 
               <div className="pt-4">
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={createDeposit.isPending}
                   className={`w-full h-14 rounded-2xl text-base font-bold text-white shadow-lg ${themeBg} hover:opacity-90 transition-opacity`}
                 >
@@ -253,7 +297,6 @@ export default function DepositMethod() {
             </form>
           </Form>
         </div>
-
       </div>
     </div>
   );

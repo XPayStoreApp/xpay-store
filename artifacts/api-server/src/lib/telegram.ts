@@ -46,9 +46,7 @@ export async function sendTelegramMessage(
     parse_mode: "HTML",
     disable_web_page_preview: true,
   };
-  if (inlineButtons?.length) {
-    payload.reply_markup = { inline_keyboard: [inlineButtons] };
-  }
+  if (inlineButtons?.length) payload.reply_markup = { inline_keyboard: [inlineButtons] };
 
   const res = await fetch(url, {
     method: "POST",
@@ -61,10 +59,7 @@ export async function sendTelegramMessage(
   }
 }
 
-export async function answerCallbackQuery(
-  callbackQueryId: string,
-  text: string,
-): Promise<void> {
+export async function answerCallbackQuery(callbackQueryId: string, text: string): Promise<void> {
   const url = apiUrl("admin", "answerCallbackQuery");
   if (!url) return;
   await fetch(url, {
@@ -78,10 +73,7 @@ export async function answerCallbackQuery(
   });
 }
 
-export async function editMessageReplyMarkup(
-  chatId: number | string,
-  messageId: number,
-): Promise<void> {
+export async function editMessageReplyMarkup(chatId: number | string, messageId: number): Promise<void> {
   const url = apiUrl("admin", "editMessageReplyMarkup");
   if (!url) return;
   await fetch(url, {
@@ -105,13 +97,19 @@ export async function notifyAdminsAboutDeposit(args: {
   proofImage?: string | null;
 }): Promise<void> {
   if (!ADMIN_CHAT_ID) return;
+
+  const amountLabel = args.currency === "USD" ? `${args.amount.toFixed(3)}$` : `${args.amount.toFixed(0)}.SY`;
+  const receiptLabel = args.proofImage
+    ? `الإيصال: ${args.proofImage.startsWith("data:") ? "[مرفق صورة]" : args.proofImage}\n`
+    : "الإيصال: غير مرفق\n";
+
   const text =
-    `💵 عملية إيداع جديدة\n` +
+    `عملية ايداع جديدة 💵\n` +
     `رقم العملية: <code>${args.depositId}</code>\n` +
-    `قيمة الإيداع: <b>${args.amount}</b> ${args.currency}\n` +
-    `من المستخدم: <code>${args.telegramId}</code> (${args.username})\n` +
+    `قيمة الايداع: <b>${amountLabel}</b>\n` +
+    `ايداع من: <code>${args.telegramId}</code> (${args.username})\n` +
     `رقم المعاملة: <code>${args.transactionId}</code>\n` +
-    `${args.proofImage ? `الإيصال: ${args.proofImage}\n` : ""}` +
+    receiptLabel +
     `\nاختر الإجراء:`;
 
   await sendTelegramMessage("admin", ADMIN_CHAT_ID, text, [
@@ -155,7 +153,8 @@ export async function notifyUserOrderCreated(args: {
   status: string;
   details: string;
 }) {
-  const statusLabel = args.status === "accept" ? "✅ مكتمل" : "⏳ انتظر";
+  const statusLabel = args.status === "accept" ? "مكتمل" : "انتظر";
+  const statusIcon = args.status === "accept" ? "✅" : "⏳";
   const msg =
     `✅ تم شراء "${args.productName}"\n` +
     `💰 السعر: ${args.priceUsd.toFixed(3)}$\n` +
@@ -164,7 +163,7 @@ export async function notifyUserOrderCreated(args: {
     `🔢 رقم الطلب: ${args.orderNumber}\n` +
     `📎 آيدي اللاعب: ${args.playerId}\n` +
     `🕓 حالة الطلب: ${args.status}\n\n` +
-    `📊 الحالة: ${statusLabel}\n` +
+    `📊 الحالة: ${statusIcon} ${statusLabel}\n` +
     `التفاصيل: ${args.details}`;
   await sendTelegramMessage("store", args.telegramId, msg);
 }
@@ -177,11 +176,7 @@ export async function notifyUserOrderStatusChanged(args: {
   note?: string;
 }) {
   const statusLabel =
-    args.status === "accept"
-      ? "✅ مكتمل"
-      : args.status === "reject"
-        ? "❌ مرفوض"
-        : "⏳ قيد الانتظار";
+    args.status === "accept" ? "✅ مكتمل" : args.status === "reject" ? "❌ مرفوض" : "⏳ قيد الانتظار";
 
   const details =
     args.note?.trim() ||
@@ -194,7 +189,7 @@ export async function notifyUserOrderStatusChanged(args: {
   const msg =
     `📦 تحديث حالة الطلب\n` +
     `🔢 رقم الطلب: ${args.orderNumber}\n` +
-    `🛍 المنتج: ${args.productName}\n` +
+    `🛒 المنتج: ${args.productName}\n` +
     `📊 الحالة: ${statusLabel}\n` +
     `التفاصيل: ${details}`;
 

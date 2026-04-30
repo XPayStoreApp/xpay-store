@@ -15,8 +15,7 @@ function readTelegramIdentity(req?: Request): { telegramId: string; username: st
   const hdr = req?.headers || {};
   const tgIdRaw =
     (hdr["x-telegram-id"] as string | undefined) ||
-    (req?.query?.["tg_id"] as string | undefined) ||
-    DEFAULT_TELEGRAM_ID;
+    (req?.query?.["tg_id"] as string | undefined);
   const usernameRaw =
     (hdr["x-telegram-username"] as string | undefined) ||
     [hdr["x-telegram-first-name"], hdr["x-telegram-last-name"]]
@@ -24,8 +23,23 @@ function readTelegramIdentity(req?: Request): { telegramId: string; username: st
       .join(" ") ||
     DEFAULT_USERNAME;
 
+  const telegramId = String(tgIdRaw || "").trim();
+  if (!telegramId) {
+    const allowFallback = process.env.ALLOW_DEFAULT_TELEGRAM_ID === "true";
+    if (allowFallback) {
+      return {
+        telegramId: DEFAULT_TELEGRAM_ID,
+        username: normalizeUsername(String(usernameRaw)),
+      };
+    }
+    const err: any = new Error("telegram_identity_missing");
+    err.statusCode = 401;
+    err.publicMessage = "هوية تيليجرام غير متاحة. افتح المتجر من داخل Telegram Mini App.";
+    throw err;
+  }
+
   return {
-    telegramId: String(tgIdRaw).trim(),
+    telegramId,
     username: normalizeUsername(String(usernameRaw)),
   };
 }
