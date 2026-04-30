@@ -75,6 +75,8 @@
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
+  --app-bg-glow: 185 100% 42%;
+  --app-bg-deep: 215 60% 18%;
 
   --background: 215 60% 10%; /* #0A1628 */
   --foreground: 210 40% 98%;
@@ -173,6 +175,12 @@
     @apply border-border;
   }
   body {
-    @apply font-sans antialiased bg-background text-foreground bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-[#0A1628] via-[#0A1628] to-[#0F2645] min-h-[100dvh];
+    @apply font-sans antialiased bg-background text-foreground min-h-[100dvh];
+    background-image: radial-gradient(
+      ellipse at top right,
+      hsl(var(--app-bg-glow)) 0%,
+      hsl(var(--background)) 55%,
+      hsl(var(--app-bg-deep)) 100%
+    );
   }
 }
