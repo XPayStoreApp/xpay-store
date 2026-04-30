@@ -1,6 +1,10 @@
 import { useRoute, Link, useLocation } from "wouter";
 import { ChevronRight, Copy, AlertTriangle } from "lucide-react";
-import { useListPaymentMethods, useCreateDeposit, getListPaymentMethodsQueryKey } from "@workspace/api-client-react";
+import {
+  useListPaymentMethods,
+  useCreateDeposit,
+  getListPaymentMethodsQueryKey,
+} from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,13 +14,29 @@ import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const depositSchema = z.object({
   currency: z.enum(["USD", "SYP"]),
   amount: z.coerce.number().positive("المبلغ يجب أن يكون أكبر من صفر"),
-  transactionId: z.string().min(3, "رقم العملية مطلوب"),
+  transactionId: z
+    .string()
+    .regex(/^\d+$/, "رقم العملية يجب أن يحتوي على أرقام فقط")
+    .min(3, "رقم العملية مطلوب"),
   proofImage: z.string().optional(),
 });
 
@@ -38,8 +58,11 @@ export default function DepositMethod() {
   const form = useForm<z.infer<typeof depositSchema>>({
     resolver: zodResolver(depositSchema),
     defaultValues: {
-      currency: methodCode?.includes("syriatel") || methodCode?.includes("mtn") ? "SYP" : "USD",
-      amount: 0,
+      currency:
+        methodCode?.includes("syriatel") || methodCode?.includes("mtn")
+          ? "SYP"
+          : "USD",
+      amount: undefined as unknown as number,
       transactionId: "",
       proofImage: "",
     },
@@ -51,6 +74,7 @@ export default function DepositMethod() {
       setProofImageName("");
       return;
     }
+
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = typeof reader.result === "string" ? reader.result : "";
@@ -62,7 +86,12 @@ export default function DepositMethod() {
 
   const onSubmit = (values: z.infer<typeof depositSchema>) => {
     if (!method) return;
-    if (values.proofImage && values.proofImage.startsWith("data:") && values.proofImage.length > 1_500_000) {
+
+    if (
+      values.proofImage &&
+      values.proofImage.startsWith("data:") &&
+      values.proofImage.length > 1_500_000
+    ) {
       toast.error("حجم صورة الإيصال كبير. اختر صورة أصغر أو استخدم رابط صورة.");
       return;
     }
@@ -111,7 +140,11 @@ export default function DepositMethod() {
   }
 
   if (!method) {
-    return <div className="p-4 text-center mt-20 text-muted-foreground">طريقة الدفع غير موجودة</div>;
+    return (
+      <div className="p-4 text-center mt-20 text-muted-foreground">
+        طريقة الدفع غير موجودة
+      </div>
+    );
   }
 
   const isSyriatel = methodCode === "syriatel_cash";
@@ -171,19 +204,29 @@ export default function DepositMethod() {
       </div>
 
       <div className="p-4 space-y-6 mt-2">
-        <div className={`p-6 rounded-3xl border shadow-lg relative overflow-hidden ${themeBgLight} ${themeBorder}`}>
+        <div
+          className={`p-6 rounded-3xl border shadow-lg relative overflow-hidden ${themeBgLight} ${themeBorder}`}
+        >
           <div className="relative z-10">
-            <h2 className={`font-black text-xl mb-4 ${themeColor}`}>{method.subtitle}</h2>
+            <h2 className={`font-black text-xl mb-4 ${themeColor}`}>
+              {method.subtitle}
+            </h2>
 
             {method.instructions && (
-              <p className="text-sm text-foreground/80 mb-6 leading-relaxed whitespace-pre-wrap">{method.instructions}</p>
+              <p className="text-sm text-foreground/80 mb-6 leading-relaxed whitespace-pre-wrap">
+                {method.instructions}
+              </p>
             )}
 
             {method.walletAddress && (
               <div className="bg-background/80 backdrop-blur-sm p-4 rounded-2xl border border-white/5">
-                <div className="text-xs text-muted-foreground mb-2">عنوان المحفظة / الرقم:</div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  عنوان المحفظة / الرقم:
+                </div>
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-mono text-sm font-bold truncate select-all">{method.walletAddress}</div>
+                  <div className="font-mono text-sm font-bold truncate select-all">
+                    {method.walletAddress}
+                  </div>
                   <button
                     onClick={() => copyToClipboard(method.walletAddress!)}
                     className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${themeBgLight} ${themeColor}`}
@@ -196,7 +239,11 @@ export default function DepositMethod() {
 
             {method.qrImage && (
               <div className="mt-4 flex justify-center">
-                <img src={method.qrImage} alt="QR Code" className="w-32 h-32 rounded-xl border border-white/10" />
+                <img
+                  src={method.qrImage}
+                  alt="QR Code"
+                  className="w-32 h-32 rounded-xl border border-white/10"
+                />
               </div>
             )}
           </div>
@@ -206,7 +253,7 @@ export default function DepositMethod() {
           <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
           <div className="text-xs leading-relaxed space-y-1 font-medium">
             <p>يرجى إدخال رقم عملية صحيح أو رفع إيصال واضح.</p>
-            <p>الطلبات تُرسل مباشرة إلى مجموعة المشرفين للمراجعة.</p>
+            <p>الطلبات ترسل مباشرة إلى مجموعة المشرفين للمراجعة.</p>
           </div>
         </div>
 
@@ -244,7 +291,12 @@ export default function DepositMethod() {
                   <FormItem>
                     <FormLabel>المبلغ المحول</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="أدخل المبلغ..." {...field} className="h-12 bg-background border-white/5 rounded-xl text-base" />
+                      <Input
+                        type="number"
+                        placeholder="أدخل المبلغ..."
+                        {...field}
+                        className="h-12 bg-background border-white/5 rounded-xl text-base"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -258,7 +310,17 @@ export default function DepositMethod() {
                   <FormItem>
                     <FormLabel>رقم العملية (Transaction ID/Ref)</FormLabel>
                     <FormControl>
-                      <Input placeholder="أدخل رقم عملية التحويل..." {...field} className="h-12 bg-background border-white/5 rounded-xl text-base font-mono" />
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder="أدخل رقم عملية التحويل..."
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(e.target.value.replace(/\D+/g, ""))
+                        }
+                        className="h-12 bg-background border-white/5 rounded-xl text-base font-mono"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -285,7 +347,11 @@ export default function DepositMethod() {
                           onChange={(e) => field.onChange(e.target.value)}
                           className="h-12 bg-background border-white/5 rounded-xl text-base"
                         />
-                        {proofImageName ? <div className="text-xs text-muted-foreground">الملف المحدد: {proofImageName}</div> : null}
+                        {proofImageName ? (
+                          <div className="text-xs text-muted-foreground">
+                            الملف المحدد: {proofImageName}
+                          </div>
+                        ) : null}
                       </div>
                     </FormControl>
                     <FormMessage />

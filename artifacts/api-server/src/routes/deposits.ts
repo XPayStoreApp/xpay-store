@@ -65,6 +65,11 @@ router.get("/deposits/summary", async (_req, res) => {
 
 router.post("/deposits", async (req, res) => {
   const body = CreateDepositBody.parse(req.body);
+  const transactionId = String(body.transactionId || "").trim();
+  if (!/^\d+$/.test(transactionId)) {
+    res.status(400).json({ error: "رقم العملية يجب أن يحتوي على أرقام فقط" });
+    return;
+  }
   const proofImage =
     typeof (req.body as any)?.proofImage === "string" && (req.body as any).proofImage.trim().length > 0
       ? String((req.body as any).proofImage)
@@ -84,7 +89,7 @@ router.post("/deposits", async (req, res) => {
       currency: body.currency,
       method: body.method,
       methodLabel,
-      transactionId: body.transactionId,
+      transactionId,
       status: "pending",
     })
     .returning();
@@ -96,7 +101,7 @@ router.post("/deposits", async (req, res) => {
       currency: body.currency,
       telegramId: user.telegramId,
       username: user.username,
-      transactionId: body.transactionId,
+      transactionId,
       proofImage,
     });
   } catch (error) {
