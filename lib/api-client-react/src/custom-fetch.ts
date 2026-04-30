@@ -17,6 +17,35 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+const TG_CACHE_KEY = "xpay_telegram_identity";
+
+type TelegramIdentity = {
+  id: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  initDataRaw?: string;
+};
+
+function readCachedTelegramIdentity(): TelegramIdentity | null {
+  try {
+    const raw = globalThis?.localStorage?.getItem(TG_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as TelegramIdentity;
+    if (!parsed?.id) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function cacheTelegramIdentity(identity: TelegramIdentity): void {
+  try {
+    globalThis?.localStorage?.setItem(TG_CACHE_KEY, JSON.stringify(identity));
+  } catch {
+    // ignore cache failures
+  }
+}
 
 function readTelegramHeaders(): Record<string, string> {
   const readInitDataRaw = (): string => {
@@ -62,7 +91,7 @@ function readTelegramHeaders(): Record<string, string> {
   try {
     const w = globalThis as any;
     const tgUser = w?.Telegram?.WebApp?.initDataUnsafe?.user;
-    const parsed = tgUser?.id
+    const parsed: TelegramIdentity | null = tgUser?.id
       ? {
           id: String(tgUser.id),
           username: String(
@@ -70,20 +99,32 @@ function readTelegramHeaders(): Record<string, string> {
           ),
           firstName: String(tgUser.first_name || ""),
           lastName: String(tgUser.last_name || ""),
+          initDataRaw: readInitDataRaw(),
         }
       : fromInitData();
-    if (!parsed?.id) return {};
+    const cached = readCachedTelegramIdentity();
+    const effective = parsed?.id ? parsed : cached;
+    if (!effective?.id) return {};
 
-    const initDataRaw = readInitDataRaw();
+    cacheTelegramIdentity(effective);
+    const initDataRaw = effective.initDataRaw || readInitDataRaw();
     return {
-      "x-telegram-id": parsed.id,
-      "x-telegram-username": parsed.username,
-      "x-telegram-first-name": parsed.firstName,
-      "x-telegram-last-name": parsed.lastName,
+      "x-telegram-id": effective.id,
+      "x-telegram-username": effective.username,
+      "x-telegram-first-name": effective.firstName,
+      "x-telegram-last-name": effective.lastName,
       ...(initDataRaw ? { "x-telegram-init-data": initDataRaw } : {}),
     };
   } catch {
-    return {};
+    const cached = readCachedTelegramIdentity();
+    if (!cached?.id) return {};
+    return {
+      "x-telegram-id": cached.id,
+      "x-telegram-username": cached.username,
+      "x-telegram-first-name": cached.firstName,
+      "x-telegram-last-name": cached.lastName,
+      ...(cached.initDataRaw ? { "x-telegram-init-data": cached.initDataRaw } : {}),
+    };
   }
 }
 
