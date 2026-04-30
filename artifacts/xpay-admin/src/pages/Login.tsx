@@ -1,9 +1,9 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { post } from "../lib/api";
 import { Lock, User } from "lucide-react";
 
 export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
-  const [username, setUsername] = useState("admin");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -16,7 +16,7 @@ export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
       const u = await post("/login", { username, password });
       onSuccess(u);
     } catch (e: any) {
-      setErr(e.message || "فشل تسجيل الدخول");
+      setErr(e.message || "ظپط´ظ„ طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„");
     } finally {
       setLoading(false);
     }
@@ -37,12 +37,12 @@ export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
             XP
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-4">XPayStore</h1>
-          <p className="text-sm text-slate-500 mt-1">لوحة الإدارة</p>
+          <p className="text-sm text-slate-500 mt-1">ظ„ظˆط­ط© ط§ظ„ط¥ط¯ط§ط±ط©</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              اسم المستخدم
+              ط§ط³ظ… ط§ظ„ظ…ط³طھط®ط¯ظ…
             </label>
             <div className="relative">
               <User
@@ -54,13 +54,13 @@ export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 className="w-full border border-slate-300 rounded-lg pr-10 pl-3 py-2.5 text-sm"
-                placeholder="admin"
+                placeholder="أدخل اسم المستخدم"
               />
             </div>
           </div>
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              كلمة المرور
+              ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط±
             </label>
             <div className="relative">
               <Lock
@@ -73,7 +73,7 @@ export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="w-full border border-slate-300 rounded-lg pr-10 pl-3 py-2.5 text-sm"
-                placeholder="••••••••"
+                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
               />
             </div>
           </div>
@@ -87,13 +87,10 @@ export default function Login({ onSuccess }: { onSuccess: (u: any) => void }) {
             disabled={loading}
             className="w-full bg-brand-600 text-white font-bold py-2.5 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
           >
-            {loading ? "جاري الدخول..." : "تسجيل الدخول"}
-          </button>
-          <p className="text-xs text-slate-500 text-center pt-2">
-            بيانات الدخول الافتراضية: admin / admin123
-          </p>
-        </form>
+            {loading ? "ط¬ط§ط±ظٹ ط§ظ„ط¯ط®ظˆظ„..." : "طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„"}
+          </button>        </form>
       </div>
     </div>
   );
 }
+
