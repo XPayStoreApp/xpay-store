@@ -409,14 +409,38 @@ function makeCrud<T extends { id: any }>(
     }
   });
   router.delete(`/admin/${path}/:id`, requireAdmin, async (req, res) => {
-    await db.delete(table).where(eq(table.id, Number(req.params.id)));
-    await logActivity(
-      { id: req.session.adminId, name: req.session.adminUsername },
-      "delete",
-      path,
-      { id: Number(req.params.id) },
-    );
-    res.json({ ok: true });
+    try {
+      const id = Number(req.params.id);
+
+      if (path === "products") {
+        const [orderStats] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(ordersTable)
+          .where(eq(ordersTable.productId, id));
+
+        if ((orderStats?.count || 0) > 0) {
+          res.status(400).json({
+            error: "لا يمكن حذف هذا المنتج لأنه مرتبط بطلبات شراء سابقة. قم بتعطيله بدلاً من الحذف.",
+          });
+          return;
+        }
+
+        await db.delete(autoCodesTable).where(eq(autoCodesTable.productId, id));
+      }
+
+      await db.delete(table).where(eq(table.id, id));
+      await logActivity(
+        { id: req.session.adminId, name: req.session.adminUsername },
+        "delete",
+        path,
+        { id },
+      );
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error(`Delete ${path} failed:`, error);
+      const httpErr = toHttpError(error);
+      res.status(httpErr.status).json({ error: httpErr.message });
+    }
   });
 }
 
