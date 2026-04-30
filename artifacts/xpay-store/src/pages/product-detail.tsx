@@ -10,6 +10,21 @@ import { useQueryClient } from "@tanstack/react-query";
 
 type PurchaseMode = "apps" | "games" | "balance";
 
+function buildFlexibleSeries(min: number, max: number, points = 10): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return [Math.max(1, min)];
+  const out: number[] = [];
+  for (let i = 0; i <= points; i++) {
+    const t = i / points;
+    const curved = t * t * (3 - 2 * t);
+    const raw = min + (max - min) * curved;
+    const rounded = Math.round(raw / 50) * 50;
+    if (!out.includes(rounded)) out.push(rounded);
+  }
+  if (!out.includes(min)) out.unshift(min);
+  if (!out.includes(max)) out.push(max);
+  return out.sort((a, b) => a - b);
+}
+
 function detectPurchaseMode(categoryName: string, productType: string): PurchaseMode {
   const normalized = (categoryName || "").toLowerCase();
 
@@ -80,7 +95,8 @@ export default function ProductDetail() {
   const isAppsPurchase = purchaseMode === "apps";
 
   const handleQtyInputChange = (value: string) => {
-    const parsed = Number(value);
+    const normalized = String(value || "").replace(/,/g, "").trim();
+    const parsed = Number(normalized);
     if (!Number.isFinite(parsed)) return;
     if (parsed < minQty) {
       setQuantity(minQty);
@@ -160,6 +176,13 @@ export default function ProductDetail() {
             </div>
 
             <div className="bg-background border border-white/5 p-2 rounded-2xl">
+              {isAppsPurchase && maxQty ? (
+                <datalist id={`apps-qty-series-${product.id}`}>
+                  {buildFlexibleSeries(Number(minQty), Number(maxQty)).map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
+              ) : null}
               <Input
                 type="number"
                 min={minQty}
@@ -167,6 +190,7 @@ export default function ProductDetail() {
                 step={1}
                 value={quantity}
                 onChange={(e) => handleQtyInputChange(e.target.value)}
+                list={isAppsPurchase && maxQty ? `apps-qty-series-${product.id}` : undefined}
                 className="w-full h-10 text-center font-bold text-lg bg-transparent border-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
