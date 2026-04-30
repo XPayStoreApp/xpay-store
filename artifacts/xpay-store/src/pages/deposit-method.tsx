@@ -62,6 +62,10 @@ export default function DepositMethod() {
 
   const onSubmit = (values: z.infer<typeof depositSchema>) => {
     if (!method) return;
+    if (values.proofImage && values.proofImage.startsWith("data:") && values.proofImage.length > 1_500_000) {
+      toast.error("حجم صورة الإيصال كبير. اختر صورة أصغر أو استخدم رابط صورة.");
+      return;
+    }
 
     createDeposit.mutate(
       {
@@ -81,7 +85,11 @@ export default function DepositMethod() {
           setLocation("/deposits");
         },
         onError: (err: any) => {
-          toast.error(err.response?.data?.message || "حدث خطأ أثناء الإرسال");
+          const apiError =
+            err?.response?.data?.error ||
+            err?.response?.data?.message ||
+            err?.message;
+          toast.error(apiError || "حدث خطأ أثناء الإرسال");
         },
       },
     );
