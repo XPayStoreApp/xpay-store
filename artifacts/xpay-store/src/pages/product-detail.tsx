@@ -73,11 +73,9 @@ export default function ProductDetail() {
   }
 
   const minQty = product.minQty || 1;
-  const maxQty = product.maxQty || undefined;
   const purchaseMode = detectPurchaseMode(product.categoryName, product.productType);
   const totalUsd = product.priceUsd * quantity;
   const totalSyp = product.priceSyp * quantity;
-  const isAppsPurchase = purchaseMode === "apps";
 
   const handleQtyInputChange = (value: string) => {
     const normalized = String(value || "").replace(/,/g, "").trim();
@@ -85,10 +83,6 @@ export default function ProductDetail() {
     if (!Number.isFinite(parsed)) return;
     if (parsed < minQty) {
       setQuantity(minQty);
-      return;
-    }
-    if (maxQty && parsed > maxQty) {
-      setQuantity(maxQty);
       return;
     }
     setQuantity(Math.floor(parsed));
@@ -156,7 +150,7 @@ export default function ProductDetail() {
             <div className="flex justify-between items-center mb-3">
               <label className="text-sm font-bold text-foreground">الكمية</label>
               <span className="text-xs text-muted-foreground">
-                ({minQty.toLocaleString()} - {(maxQty || 1000000).toLocaleString()})
+                (الحد الأدنى: {minQty.toLocaleString()})
               </span>
             </div>
 
@@ -164,19 +158,12 @@ export default function ProductDetail() {
               <Input
                 type="number"
                 min={minQty}
-                max={maxQty}
                 step={1}
                 value={quantity}
                 onChange={(e) => handleQtyInputChange(e.target.value)}
                 className="w-full h-10 text-center font-bold text-lg bg-transparent border-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
-            {isAppsPurchase ? (
-              <p className="text-xs text-muted-foreground mt-2">
-                كمية المزود الفعلية: من {Number(minQty).toLocaleString()} إلى{" "}
-                {Number(maxQty || minQty).toLocaleString()} (اختيار حر ضمن المدى)
-              </p>
-            ) : null}
           </div>
 
           {(purchaseMode === "apps" || purchaseMode === "games") && (

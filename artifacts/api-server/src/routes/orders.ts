@@ -104,10 +104,6 @@ router.post("/orders", async (req, res) => {
     res.status(400).json({ error: `الحد الأدنى هو ${Number(product.minQty)}` });
     return;
   }
-  if (product.maxQty && body.quantity > Number(product.maxQty)) {
-    res.status(400).json({ error: `الحد الأعلى هو ${Number(product.maxQty)}` });
-    return;
-  }
 
   let providerOrderResult: {
     success: boolean;
@@ -150,10 +146,6 @@ router.post("/orders", async (req, res) => {
 
         if (providerProduct.minQty != null && body.quantity < Number(providerProduct.minQty)) {
           res.status(400).json({ error: `الحد الأدنى لدى المزود هو ${Number(providerProduct.minQty)}` });
-          return;
-        }
-        if (providerProduct.maxQty != null && body.quantity > Number(providerProduct.maxQty)) {
-          res.status(400).json({ error: `الحد الأعلى لدى المزود هو ${Number(providerProduct.maxQty)}` });
           return;
         }
       }
