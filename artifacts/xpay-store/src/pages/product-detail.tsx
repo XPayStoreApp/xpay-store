@@ -46,6 +46,7 @@ export default function ProductDetail() {
 
   const createOrder = useCreateOrder();
   const [quantity, setQuantity] = useState(1);
+  const [quantityInput, setQuantityInput] = useState("1");
   const [accountId, setAccountId] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
 
@@ -53,6 +54,7 @@ export default function ProductDetail() {
     if (!product) return;
     const min = Number(product.minQty || 1);
     setQuantity(min);
+    setQuantityInput(String(min));
   }, [product?.id, product?.minQty]);
 
   if (isLoading) {
@@ -77,18 +79,42 @@ export default function ProductDetail() {
   const totalUsd = product.priceUsd * quantity;
   const totalSyp = product.priceSyp * quantity;
 
+  const commitQuantityInput = (rawValue?: string) => {
+    const source = typeof rawValue === "string" ? rawValue : quantityInput;
+    const normalized = String(source || "").replace(/,/g, "").trim();
+    if (!normalized) {
+      setQuantity(minQty);
+      setQuantityInput(String(minQty));
+      return minQty;
+    }
+
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setQuantity(minQty);
+      setQuantityInput(String(minQty));
+      return minQty;
+    }
+
+    const nextQuantity = Math.max(minQty, Math.floor(parsed));
+    setQuantity(nextQuantity);
+    setQuantityInput(String(nextQuantity));
+    return nextQuantity;
+  };
+
   const handleQtyInputChange = (value: string) => {
     const normalized = String(value || "").replace(/,/g, "").trim();
-    const parsed = Number(normalized);
-    if (!Number.isFinite(parsed)) return;
-    if (parsed < minQty) {
-      setQuantity(minQty);
+    if (!normalized) {
+      setQuantityInput("");
       return;
     }
-    setQuantity(Math.floor(parsed));
+
+    if (!/^\d+$/.test(normalized)) return;
+    setQuantityInput(normalized);
   };
 
   const handlePurchase = () => {
+    const finalQuantity = commitQuantityInput();
+
     if (purchaseMode === "balance") {
       if (!phoneNumber.trim()) {
         toast.error("يرجى إدخال رقم الخط");
@@ -103,7 +129,7 @@ export default function ProductDetail() {
       {
         data: {
           productId: product.id,
-          quantity,
+          quantity: finalQuantity,
           userIdentifier: purchaseMode === "balance" ? phoneNumber.trim() : accountId.trim(),
         },
       },
@@ -159,8 +185,9 @@ export default function ProductDetail() {
                 type="number"
                 min={minQty}
                 step={1}
-                value={quantity}
+                value={quantityInput}
                 onChange={(e) => handleQtyInputChange(e.target.value)}
+                onBlur={() => commitQuantityInput()}
                 className="w-full h-10 text-center font-bold text-lg bg-transparent border-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
