@@ -1,11 +1,10 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 
 const router: IRouter = Router();
 
 const STORE_BOT_TOKEN = process.env.TELEGRAM_STORE_BOT_TOKEN || "";
 const STORE_WEBHOOK_SECRET = process.env.TELEGRAM_STORE_WEBHOOK_SECRET || "";
 const MINI_APP_URL = process.env.TELEGRAM_MINI_APP_URL || "";
-const SUPPORT_URL = process.env.TELEGRAM_SUPPORT_URL || "https://t.me/XPayStoreCRBot";
 
 async function telegramApi(method: string, body: Record<string, unknown>) {
   if (!STORE_BOT_TOKEN) return;
@@ -15,6 +14,19 @@ async function telegramApi(method: string, body: Record<string, unknown>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function buildOpenStoreMarkup() {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "🛍️ فتح المتجر",
+          web_app: { url: MINI_APP_URL },
+        },
+      ],
+    ],
+  };
 }
 
 router.post("/telegram/store/webhook", async (req, res) => {
@@ -29,32 +41,20 @@ router.post("/telegram/store/webhook", async (req, res) => {
   const msg = req.body?.message;
   const chatId = msg?.chat?.id;
   const text = String(msg?.text || "").trim().toLowerCase();
+
   if (!chatId) {
     res.json({ ok: true });
     return;
   }
 
-  if (text === "/start" || text === "ابدأ" || text === "start") {
-    await telegramApi("sendMessage", {
-      chat_id: chatId,
-      text: "🛍️ مرحباً بك في XPayStore",
-      reply_markup: {
-        keyboard: [
-          [{ text: "🛍️ المنتجات" }, { text: "💼 معلومات الحساب" }],
-          [{ text: "📘 تعليمات استخدام البوت" }, { text: "🤖 تواصل معنا" }],
-        ],
-        resize_keyboard: true,
-      },
-    });
-    res.json({ ok: true });
-    return;
-  }
+  const isStart = text === "/start" || text === "ابدأ" || text === "start";
+  const isProducts = text.includes("المنتجات") || text.includes("products");
 
-  if (text.includes("المنتجات")) {
+  if (isStart || isProducts) {
     if (!MINI_APP_URL) {
       await telegramApi("sendMessage", {
         chat_id: chatId,
-        text: "رابط Mini App غير مضبوط بعد.",
+        text: "رابط المتجر غير مضبوط حالياً. تواصل مع الإدارة.",
       });
       res.json({ ok: true });
       return;
@@ -63,48 +63,18 @@ router.post("/telegram/store/webhook", async (req, res) => {
     await telegramApi("sendMessage", {
       chat_id: chatId,
       text: "اضغط الزر لفتح المتجر مباشرة:",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "🛍️ فتح المتجر",
-              web_app: { url: MINI_APP_URL },
-            },
-          ],
-        ],
-      },
+      reply_markup: buildOpenStoreMarkup(),
     });
+
     res.json({ ok: true });
     return;
   }
 
-  if (text.includes("معلومات الحساب")) {
-    await telegramApi("sendMessage", {
-      chat_id: chatId,
-      text: "افتح Mini App ثم ادخل صفحة الملف الشخصي لرؤية الرصيد والمعرف.",
-    });
-    res.json({ ok: true });
-    return;
-  }
-
-  if (text.includes("تعليمات")) {
-    await telegramApi("sendMessage", {
-      chat_id: chatId,
-      text:
-        "طريقة الاستخدام:\n1) افتح المنتجات\n2) اختر المنتج\n3) أدخل ID اللاعب\n4) أكد الشراء\n5) راقب حالة الطلب من قسم الطلبات.",
-    });
-    res.json({ ok: true });
-    return;
-  }
-
-  if (text.includes("تواصل")) {
-    await telegramApi("sendMessage", {
-      chat_id: chatId,
-      text: `للتواصل:\n${SUPPORT_URL}`,
-    });
-    res.json({ ok: true });
-    return;
-  }
+  await telegramApi("sendMessage", {
+    chat_id: chatId,
+    text: "استخدم زر فتح المتجر للدخول مباشرة.",
+    reply_markup: buildOpenStoreMarkup(),
+  });
 
   res.json({ ok: true });
 });
