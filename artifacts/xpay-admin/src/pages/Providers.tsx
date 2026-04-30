@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { get, del, post, put } from "../lib/api";
-import { Plus, Edit2, Trash2, X, Save } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Save, Search } from "lucide-react";
 import { api } from "../lib/api";
 
 interface Provider {
@@ -75,7 +75,7 @@ export default function Providers() {
   };
 
   // دالة استخراج المعرف بأي ثمن
-  const navigateToProducts = (p: any, event: React.MouseEvent) => {
+  const navigateToProducts = (p: any, event: React.MouseEvent, searchMode = false) => {
     // 1. طباعة كل ما يمكن معرفته عن الكائن
     console.log("🔎 Full provider object:", JSON.parse(JSON.stringify(p)));
     console.log("🔎 Object keys:", Object.keys(p));
@@ -104,7 +104,7 @@ export default function Providers() {
     }
     
     console.log("✅ Navigating to products with id:", pid);
-    navigate(`/providers/${pid}/products`);
+    navigate(`/providers/${pid}/products${searchMode ? "?search=1" : ""}`);
   };
 
   return (
@@ -164,6 +164,12 @@ export default function Providers() {
                           className="px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 text-xs"
                         >
                           منتجات
+                        </button>
+                        <button
+                          onClick={(e) => navigateToProducts(p, e, true)}
+                          className="px-3 py-1 bg-violet-500 text-white rounded hover:bg-violet-600 text-xs flex items-center gap-1"
+                        >
+                          <Search size={12} /> بحث المنتجات
                         </button>
                         <button
                           onClick={() => handleSync(p.id)}
