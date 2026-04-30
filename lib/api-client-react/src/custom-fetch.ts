@@ -19,6 +19,22 @@ let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 
 function readTelegramHeaders(): Record<string, string> {
+  const readInitDataRaw = (): string => {
+    try {
+      const w = globalThis as any;
+      const fromSdk = String(w?.Telegram?.WebApp?.initData || "").trim();
+      if (fromSdk) return fromSdk;
+
+      const search = new URLSearchParams(globalThis?.location?.search || "");
+      const hashRaw = String(globalThis?.location?.hash || "").replace(/^#/, "");
+      const hash = new URLSearchParams(hashRaw);
+      const webAppData = search.get("tgWebAppData") || hash.get("tgWebAppData");
+      return String(webAppData || "").trim();
+    } catch {
+      return "";
+    }
+  };
+
   const fromInitData = () => {
     try {
       const search = new URLSearchParams(globalThis?.location?.search || "");
@@ -58,11 +74,13 @@ function readTelegramHeaders(): Record<string, string> {
       : fromInitData();
     if (!parsed?.id) return {};
 
+    const initDataRaw = readInitDataRaw();
     return {
       "x-telegram-id": parsed.id,
       "x-telegram-username": parsed.username,
       "x-telegram-first-name": parsed.firstName,
       "x-telegram-last-name": parsed.lastName,
+      ...(initDataRaw ? { "x-telegram-init-data": initDataRaw } : {}),
     };
   } catch {
     return {};

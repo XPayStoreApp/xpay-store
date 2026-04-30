@@ -11,8 +11,30 @@ function normalizeUsername(input?: string | null): string {
   return raw.slice(0, 64);
 }
 
+function readIdentityFromInitData(initDataRaw?: string): { telegramId: string; username: string } | null {
+  try {
+    const raw = String(initDataRaw || "").trim();
+    if (!raw) return null;
+    const p = new URLSearchParams(raw);
+    const userRaw = p.get("user");
+    if (!userRaw) return null;
+    const user = JSON.parse(userRaw);
+    if (!user?.id) return null;
+    const username = normalizeUsername(
+      String(user.username || `${user.first_name || ""} ${user.last_name || ""}`.trim() || DEFAULT_USERNAME),
+    );
+    return { telegramId: String(user.id), username };
+  } catch {
+    return null;
+  }
+}
+
 function readTelegramIdentity(req?: Request): { telegramId: string; username: string } {
   const hdr = req?.headers || {};
+  const initDataRaw = hdr["x-telegram-init-data"] as string | undefined;
+  const parsedFromInitData = readIdentityFromInitData(initDataRaw);
+  if (parsedFromInitData?.telegramId) return parsedFromInitData;
+
   const tgIdRaw =
     (hdr["x-telegram-id"] as string | undefined) ||
     (req?.query?.["tg_id"] as string | undefined);
