@@ -1,7 +1,7 @@
 import { useGetProduct, getGetProductQueryKey, useCreateOrder } from "@workspace/api-client-react";
 import { useRoute, useLocation, Link } from "wouter";
 import { ChevronRight, ShoppingCart, AlertCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,12 @@ export default function ProductDetail() {
   const purchaseMode = detectPurchaseMode(product.categoryName, product.productType);
   const totalUsd = product.priceUsd * quantity;
   const totalSyp = product.priceSyp * quantity;
+  const isAppsPurchase = purchaseMode === "apps";
+
+  useEffect(() => {
+    const min = Number(product.minQty || 1);
+    setQuantity(min);
+  }, [product.id, product.minQty]);
 
   const handleQtyInputChange = (value: string) => {
     const parsed = Number(value);
@@ -163,6 +169,12 @@ export default function ProductDetail() {
                 className="w-full h-10 text-center font-bold text-lg bg-transparent border-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
+            {isAppsPurchase ? (
+              <p className="text-xs text-muted-foreground mt-2">
+                كمية المزود الفعلية: من {Number(minQty).toLocaleString()} إلى{" "}
+                {Number(maxQty || minQty).toLocaleString()} (اختيار حر ضمن المدى)
+              </p>
+            ) : null}
           </div>
 
           {(purchaseMode === "apps" || purchaseMode === "games") && (
