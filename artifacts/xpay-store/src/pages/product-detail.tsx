@@ -1,6 +1,6 @@
 import { useGetProduct, getGetProductQueryKey, useCreateOrder } from "@workspace/api-client-react";
 import { useRoute, useLocation, Link } from "wouter";
-import { ChevronRight, Minus, Plus, ShoppingCart, AlertCircle } from "lucide-react";
+import { ChevronRight, ShoppingCart, AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -71,13 +71,6 @@ export default function ProductDetail() {
   const purchaseMode = detectPurchaseMode(product.categoryName, product.productType);
   const totalUsd = product.priceUsd * quantity;
   const totalSyp = product.priceSyp * quantity;
-
-  const handleQtyChange = (delta: number) => {
-    const next = quantity + delta;
-    if (next < minQty) return;
-    if (maxQty && next > maxQty) return;
-    setQuantity(next);
-  };
 
   const handleQtyInputChange = (value: string) => {
     const parsed = Number(value);
@@ -159,14 +152,7 @@ export default function ProductDetail() {
               </span>
             </div>
 
-            <div className="flex items-center gap-4 bg-background border border-white/5 p-2 rounded-2xl">
-              <button
-                onClick={() => handleQtyChange(1)}
-                disabled={!!maxQty && quantity >= maxQty}
-                className="w-10 h-10 rounded-xl bg-card border border-white/5 flex items-center justify-center text-foreground hover:bg-white/5 active:scale-95 disabled:opacity-50 transition-all"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
+            <div className="bg-background border border-white/5 p-2 rounded-2xl">
               <Input
                 type="number"
                 min={minQty}
@@ -174,15 +160,8 @@ export default function ProductDetail() {
                 step={1}
                 value={quantity}
                 onChange={(e) => handleQtyInputChange(e.target.value)}
-                className="flex-1 h-10 text-center font-bold text-lg bg-transparent border-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full h-10 text-center font-bold text-lg bg-transparent border-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <button
-                onClick={() => handleQtyChange(-1)}
-                disabled={quantity <= minQty}
-                className="w-10 h-10 rounded-xl bg-card border border-white/5 flex items-center justify-center text-foreground hover:bg-white/5 active:scale-95 disabled:opacity-50 transition-all"
-              >
-                <Minus className="w-5 h-5" />
-              </button>
             </div>
           </div>
 
