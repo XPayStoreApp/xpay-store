@@ -182,9 +182,9 @@ export default function ProductDetail() {
 
             <div className="bg-background border border-white/5 p-2 rounded-2xl">
               <Input
-                type="number"
-                min={minQty}
-                step={1}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={quantityInput}
                 onChange={(e) => handleQtyInputChange(e.target.value)}
                 onBlur={() => commitQuantityInput()}
