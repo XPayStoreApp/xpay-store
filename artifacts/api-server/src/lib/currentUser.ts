@@ -40,6 +40,7 @@ function readTelegramIdentity(req?: Request): { telegramId: string; username: st
     (req?.query?.["tg_id"] as string | undefined);
   const usernameRaw =
     (hdr["x-telegram-username"] as string | undefined) ||
+    (req?.query?.["tg_username"] as string | undefined) ||
     [hdr["x-telegram-first-name"], hdr["x-telegram-last-name"]]
       .filter(Boolean)
       .join(" ") ||

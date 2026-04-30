@@ -147,6 +147,35 @@ function resolveUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+function withTelegramQueryParams(
+  input: RequestInfo | URL,
+  telegramId?: string | null,
+  telegramUsername?: string | null,
+): RequestInfo | URL {
+  const id = String(telegramId || "").trim();
+  if (!id) return input;
+
+  const username = String(telegramUsername || "").trim();
+  const rawUrl = resolveUrl(input);
+
+  try {
+    const base = typeof globalThis?.location?.origin === "string" ? globalThis.location.origin : "http://localhost";
+    const u = new URL(rawUrl, base);
+    if (!u.searchParams.get("tg_id")) u.searchParams.set("tg_id", id);
+    if (username && !u.searchParams.get("tg_username")) u.searchParams.set("tg_username", username);
+
+    const out = rawUrl.startsWith("/")
+      ? `${u.pathname}${u.search}${u.hash}`
+      : u.toString();
+
+    if (typeof input === "string") return out;
+    if (isUrl(input)) return new URL(out, base);
+    return new Request(out, input as Request);
+  } catch {
+    return input;
+  }
+}
+
 function mergeHeaders(...sources: Array<HeadersInit | undefined>): Headers {
   const headers = new Headers();
 
@@ -409,6 +438,10 @@ export async function customFetch<T = unknown>(
     readTelegramHeaders(),
     headersInit,
   );
+
+  const tgId = headers.get("x-telegram-id");
+  const tgUsername = headers.get("x-telegram-username");
+  input = withTelegramQueryParams(input, tgId, tgUsername);
 
   if (
     typeof init.body === "string" &&
