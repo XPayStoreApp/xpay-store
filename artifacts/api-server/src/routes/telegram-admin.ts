@@ -28,17 +28,8 @@ async function readAdminTelegramIds(): Promise<Set<string>> {
     .limit(1);
 
   const v = row?.value as unknown;
-  if (Array.isArray(v)) {
-    return new Set(v.map((x) => String(x).trim()).filter(Boolean));
-  }
-  if (typeof v === "string") {
-    return new Set(
-      v
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-    );
-  }
+  if (Array.isArray(v)) return new Set(v.map((x) => String(x).trim()).filter(Boolean));
+  if (typeof v === "string") return new Set(v.split(",").map((x) => x.trim()).filter(Boolean));
   return new Set();
 }
 
@@ -48,11 +39,9 @@ async function applyDepositDecision(depositId: number, status: "approved" | "rej
     .from(depositsTable)
     .where(eq(depositsTable.id, depositId))
     .limit(1);
-  if (!dep) return { ok: false as const, message: "الطلب غير موجود" };
 
-  if (dep.status !== "pending") {
-    return { ok: false as const, message: `تمت معالجته مسبقًا (${dep.status})` };
-  }
+  if (!dep) return { ok: false as const, message: "الطلب غير موجود" };
+  if (dep.status !== "pending") return { ok: false as const, message: `تمت معالجته مسبقاً (${dep.status})` };
 
   if (status === "approved") {
     const col = dep.currency === "SYP" ? "balanceSyp" : "balanceUsd";
@@ -70,10 +59,7 @@ async function applyDepositDecision(depositId: number, status: "approved" | "rej
     }
   }
 
-  await db
-    .update(depositsTable)
-    .set({ status })
-    .where(eq(depositsTable.id, depositId));
+  await db.update(depositsTable).set({ status }).where(eq(depositsTable.id, depositId));
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, dep.userId)).limit(1);
   if (user) {
@@ -96,49 +82,62 @@ async function applyDepositDecision(depositId: number, status: "approved" | "rej
 }
 
 router.post("/telegram/admin/callback", async (req, res) => {
-  const expected = getTelegramWebhookSecret();
-  if (expected) {
-    const secret = req.headers["x-telegram-bot-api-secret-token"];
-    if (String(secret || "") !== expected) {
-      res.status(401).json({ ok: false });
+  try {
+    const expected = getTelegramWebhookSecret();
+    const strictSecret = process.env.TELEGRAM_ADMIN_WEBHOOK_STRICT === "true";
+    if (expected) {
+      const secretHeader = String(req.headers["x-telegram-bot-api-secret-token"] || "");
+      if (secretHeader) {
+        if (secretHeader !== expected) {
+          res.status(401).json({ ok: false, error: "invalid_secret" });
+          return;
+        }
+      } else if (strictSecret) {
+        res.status(401).json({ ok: false, error: "missing_secret" });
+        return;
+      } else {
+        console.warn("Admin Telegram callback without secret header. Allowed because strict mode is disabled.");
+      }
+    }
+
+    const update = req.body as TelegramUpdate;
+    const cb = update.callback_query;
+    if (!cb?.id || !cb.data) {
+      res.json({ ok: true });
       return;
     }
-  }
 
-  const update = req.body as TelegramUpdate;
-  const cb = update.callback_query;
-  if (!cb?.id || !cb.data) {
+    const actorTelegramId = String(cb.from?.id || "");
+    const allowed = await readAdminTelegramIds();
+    if (!allowed.has(actorTelegramId)) {
+      await answerCallbackQuery(cb.id, "غير مصرح لك بهذا الإجراء");
+      res.json({ ok: true });
+      return;
+    }
+
+    const m = cb.data.match(/^dep:(approve|reject):(\d+)$/);
+    if (!m) {
+      await answerCallbackQuery(cb.id, "أمر غير صالح");
+      res.json({ ok: true });
+      return;
+    }
+
+    const action = m[1]!;
+    const depositId = Number(m[2]!);
+    const result = await applyDepositDecision(depositId, action === "approve" ? "approved" : "rejected");
+    await answerCallbackQuery(cb.id, result.message);
+
+    const chatId = cb.message?.chat?.id;
+    const messageId = cb.message?.message_id;
+    if (chatId && messageId) {
+      await editMessageReplyMarkup(chatId, messageId);
+    }
+
     res.json({ ok: true });
-    return;
-  }
-
-  const actorTelegramId = String(cb.from?.id || "");
-  const allowed = await readAdminTelegramIds();
-  if (!allowed.has(actorTelegramId)) {
-    await answerCallbackQuery(cb.id, "غير مصرح لك بهذا الإجراء");
+  } catch (error) {
+    console.error("Telegram admin callback handler failed:", error);
     res.json({ ok: true });
-    return;
   }
-
-  const m = cb.data.match(/^dep:(approve|reject):(\d+)$/);
-  if (!m) {
-    await answerCallbackQuery(cb.id, "أمر غير صالح");
-    res.json({ ok: true });
-    return;
-  }
-
-  const action = m[1]!;
-  const depositId = Number(m[2]!);
-  const result = await applyDepositDecision(depositId, action === "approve" ? "approved" : "rejected");
-  await answerCallbackQuery(cb.id, result.message);
-
-  const chatId = cb.message?.chat?.id;
-  const messageId = cb.message?.message_id;
-  if (chatId && messageId) {
-    await editMessageReplyMarkup(chatId, messageId);
-  }
-
-  res.json({ ok: true });
 });
 
 export default router;
