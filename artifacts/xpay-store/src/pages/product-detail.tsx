@@ -79,6 +79,20 @@ export default function ProductDetail() {
     setQuantity(next);
   };
 
+  const handleQtyInputChange = (value: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return;
+    if (parsed < minQty) {
+      setQuantity(minQty);
+      return;
+    }
+    if (maxQty && parsed > maxQty) {
+      setQuantity(maxQty);
+      return;
+    }
+    setQuantity(Math.floor(parsed));
+  };
+
   const handlePurchase = () => {
     if (purchaseMode === "balance") {
       if (!phoneNumber.trim()) {
@@ -153,7 +167,15 @@ export default function ProductDetail() {
               >
                 <Plus className="w-5 h-5" />
               </button>
-              <div className="flex-1 text-center font-bold text-lg">{quantity}</div>
+              <Input
+                type="number"
+                min={minQty}
+                max={maxQty}
+                step={1}
+                value={quantity}
+                onChange={(e) => handleQtyInputChange(e.target.value)}
+                className="flex-1 h-10 text-center font-bold text-lg bg-transparent border-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
               <button
                 onClick={() => handleQtyChange(-1)}
                 disabled={quantity <= minQty}
