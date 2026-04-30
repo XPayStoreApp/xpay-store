@@ -4,7 +4,15 @@ const ADMIN_BOT_TOKEN = process.env.TELEGRAM_ADMIN_BOT_TOKEN || "";
 const STORE_BOT_TOKEN = process.env.TELEGRAM_STORE_BOT_TOKEN || "";
 const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID || "";
 const WEBHOOK_SECRET = process.env.TELEGRAM_ADMIN_WEBHOOK_SECRET || "";
-const PUBLIC_API_BASE = (process.env.PUBLIC_API_BASE_URL || process.env.API_PUBLIC_URL || "").replace(/\/+$/, "");
+const PUBLIC_API_BASE = (
+  process.env.PUBLIC_API_BASE_URL ||
+  process.env.API_PUBLIC_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  ""
+).replace(/\/+$/, "");
+const ADMIN_WEBHOOK_PATH = "/api/telegram/admin/callback";
+
+let adminWebhookReady: Promise<void> | null = null;
 
 function tokenFor(kind: "admin" | "store"): string {
   return kind === "admin" ? ADMIN_BOT_TOKEN : STORE_BOT_TOKEN;
@@ -21,14 +29,62 @@ export function getTelegramWebhookSecret(): string {
 }
 
 export function getTelegramConfigStatus() {
-  const webhookPath = "/api/telegram/admin/callback";
   return {
     adminBotTokenConfigured: !!ADMIN_BOT_TOKEN,
     storeBotTokenConfigured: !!STORE_BOT_TOKEN,
     adminChatIdConfigured: !!ADMIN_CHAT_ID,
     webhookSecretConfigured: !!WEBHOOK_SECRET,
-    webhookUrl: PUBLIC_API_BASE ? `${PUBLIC_API_BASE}${webhookPath}` : "",
+    webhookUrl: PUBLIC_API_BASE ? `${PUBLIC_API_BASE}${ADMIN_WEBHOOK_PATH}` : "",
   };
+}
+
+async function ensureAdminWebhook(): Promise<void> {
+  if (adminWebhookReady) {
+    await adminWebhookReady;
+    return;
+  }
+
+  adminWebhookReady = (async () => {
+    if (!ADMIN_BOT_TOKEN || !PUBLIC_API_BASE) return;
+
+    const expectedUrl = `${PUBLIC_API_BASE}${ADMIN_WEBHOOK_PATH}`;
+    const infoUrl = apiUrl("admin", "getWebhookInfo");
+    const setUrl = apiUrl("admin", "setWebhook");
+    if (!infoUrl || !setUrl) return;
+
+    const infoRes = await fetch(infoUrl);
+    const infoJson = (await infoRes.json().catch(() => null)) as
+      | { ok?: boolean; result?: { url?: string } }
+      | null;
+
+    const currentUrl = String(infoJson?.result?.url || "");
+    if (currentUrl === expectedUrl) return;
+
+    const payload: Record<string, unknown> = { url: expectedUrl };
+    if (WEBHOOK_SECRET) payload.secret_token = WEBHOOK_SECRET;
+
+    const setRes = await fetch(setUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!setRes.ok) {
+      const txt = await setRes.text();
+      throw new Error(`Telegram setWebhook failed: ${setRes.status} ${txt}`);
+    }
+  })().catch((error) => {
+    adminWebhookReady = null;
+    throw error;
+  });
+
+  await adminWebhookReady;
+}
+
+export function primeTelegramIntegrations(): void {
+  void ensureAdminWebhook().catch((error) => {
+    console.error("Admin Telegram webhook auto-setup failed:", error);
+  });
 }
 
 export async function sendTelegramMessage(
@@ -39,6 +95,10 @@ export async function sendTelegramMessage(
 ): Promise<void> {
   const url = apiUrl(kind, "sendMessage");
   if (!url) return;
+
+  if (kind === "admin") {
+    await ensureAdminWebhook();
+  }
 
   const payload: Record<string, unknown> = {
     chat_id: chatId,
@@ -104,10 +164,10 @@ export async function notifyAdminsAboutDeposit(args: {
     : "الإيصال: غير مرفق\n";
 
   const text =
-    `عملية ايداع جديدة 💵\n` +
+    `عملية إيداع جديدة 💵\n` +
     `رقم العملية: <code>${args.depositId}</code>\n` +
-    `قيمة الايداع: <b>${amountLabel}</b>\n` +
-    `ايداع من: <code>${args.telegramId}</code> (${args.username})\n` +
+    `قيمة الإيداع: <b>${amountLabel}</b>\n` +
+    `إيداع من: <code>${args.telegramId}</code> (${args.username})\n` +
     `رقم المعاملة: <code>${args.transactionId}</code>\n` +
     receiptLabel +
     `\nاختر الإجراء:`;
@@ -153,8 +213,16 @@ export async function notifyUserOrderCreated(args: {
   status: string;
   details: string;
 }) {
-  const statusLabel = args.status === "accept" ? "مكتمل" : "انتظر";
-  const statusIcon = args.status === "accept" ? "✅" : "⏳";
+  const isAccepted = args.status === "accept";
+  const isRejected = args.status === "reject";
+  const statusLabel = isAccepted ? "مكتمل" : isRejected ? "مرفوض" : "قيد الانتظار";
+  const statusIcon = isAccepted ? "✅" : isRejected ? "❌" : "⏳";
+  const reminderLine = isAccepted
+    ? "تم تنفيذ طلبك بنجاح."
+    : isRejected
+      ? "تم رفض الطلب. راجع التفاصيل أو تواصل مع الدعم إذا لزم."
+      : "سنقوم بتذكيرك تلقائياً فور تحديث حالة الطلب من المزود.";
+
   const msg =
     `✅ تم شراء "${args.productName}"\n` +
     `💰 السعر: ${args.priceUsd.toFixed(3)}$\n` +
@@ -163,7 +231,8 @@ export async function notifyUserOrderCreated(args: {
     `🔢 رقم الطلب: ${args.orderNumber}\n` +
     `📎 آيدي اللاعب: ${args.playerId}\n` +
     `🕓 حالة الطلب: ${args.status}\n\n` +
-    `📊 الحالة: ${statusIcon} ${statusLabel}\n` +
+    `📊 الحالة الحالية: ${statusIcon} ${statusLabel}\n` +
+    `🔔 التذكير: ${reminderLine}\n` +
     `التفاصيل: ${args.details}`;
   await sendTelegramMessage("store", args.telegramId, msg);
 }
@@ -191,6 +260,7 @@ export async function notifyUserOrderStatusChanged(args: {
     `🔢 رقم الطلب: ${args.orderNumber}\n` +
     `🛒 المنتج: ${args.productName}\n` +
     `📊 الحالة: ${statusLabel}\n` +
+    `🔔 تذكير: هذه هي آخر حالة مؤكدة لطلبك.\n` +
     `التفاصيل: ${details}`;
 
   await sendTelegramMessage("store", args.telegramId, msg);
