@@ -39,7 +39,7 @@ export default function Home() {
             </div>
           </div>
           <Link href="/profile">
-            <div className="bg-card border border-white/5 rounded-xl px-3 py-2 flex flex-col gap-1 cursor-pointer min-w-[150px]">
+            <div className="bg-card border border-white/5 rounded-xl px-3 py-2 flex flex-col gap-1 cursor-pointer min-w-[120px] sm:min-w-[150px]">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-muted-foreground">ID:</span>
                 <span className="text-xs font-mono font-medium text-foreground">
@@ -133,7 +133,7 @@ export default function Home() {
         </div>
         
         {categoriesLoading ? (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="flex flex-col items-center gap-2">
                 <Skeleton className="w-full aspect-square rounded-2xl" />
@@ -142,7 +142,7 @@ export default function Home() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-x-3 gap-y-5">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-x-3 gap-y-5">
             {categories?.map((cat, i) => (
               <Link key={cat.id} href={`/categories/${cat.id}`}>
                 <motion.div 

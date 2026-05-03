@@ -13,10 +13,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="mx-auto max-w-md min-h-screen bg-background shadow-2xl relative pb-20">
-      <main className="min-h-[calc(100vh-80px)]">{children}</main>
+    <div className="w-full min-h-[100dvh] bg-background relative pb-20">
+      <div className="mx-auto w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl min-h-[100dvh] bg-background shadow-2xl relative">
+        <main className="min-h-[calc(100dvh-80px)]">{children}</main>
+      </div>
 
-      <nav className="fixed bottom-0 w-full max-w-md bg-card/80 backdrop-blur-xl border-t border-white/5 pb-safe z-50">
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl bg-card/80 backdrop-blur-xl border-t border-white/5 pb-safe z-50">
         <div className="flex items-center justify-around px-2 h-16">
           {navItems.map((item) => {
             const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
