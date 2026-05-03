@@ -281,6 +281,15 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
     });
   } catch (error: any) {
     console.error("ShamCash invoice create failed:", error);
+    if (error?.message === "telegram_identity_missing") {
+      console.error("ShamCash identity debug:", {
+        hasHeaderId: !!req.headers["x-telegram-id"],
+        hasHeaderInitData: !!req.headers["x-telegram-init-data"],
+        hasBodyId: !!req.body?.telegramId,
+        hasBodyInitData: !!req.body?.telegramInitData,
+        queryTgId: req.query?.tg_id || null,
+      });
+    }
     res.status(500).json({
       error: "SHAMCASH_INVOICE_EXCEPTION",
       message: error?.message || "failed_to_create_invoice",

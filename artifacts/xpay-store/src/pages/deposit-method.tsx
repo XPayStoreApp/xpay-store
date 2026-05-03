@@ -46,6 +46,14 @@ type UiMethod = {
   qrImage?: string;
 };
 
+type TelegramIdentity = {
+  id: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  initDataRaw: string;
+};
+
 function getMethodName(method: UiMethod) {
   if (method.code === "sham_cash_auto") return "شام كاش";
   return method.name;
@@ -72,33 +80,55 @@ export default function DepositMethod() {
   const method = (methods as UiMethod[] | undefined)?.find((m) => m.code === methodCode);
   const apiBaseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
-  const getTelegramIdentityHeaders = (): Record<string, string> => {
-    const tg = (window as any)?.Telegram?.WebApp;
-    const user = tg?.initDataUnsafe?.user;
-    const initData = typeof tg?.initData === "string" ? tg.initData : "";
-    const headers: Record<string, string> = {};
+  const readTelegramIdentity = (): TelegramIdentity | null => {
+    try {
+      const tg = (window as any)?.Telegram?.WebApp;
+      const user = tg?.initDataUnsafe?.user;
+      const initData = String(tg?.initData || "").trim();
+      if (user?.id != null) {
+        const identity: TelegramIdentity = {
+          id: String(user.id),
+          username: String(user.username || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "TelegramUser"),
+          firstName: String(user.first_name || ""),
+          lastName: String(user.last_name || ""),
+          initDataRaw: initData,
+        };
+        localStorage.setItem("tg_identity_cache", JSON.stringify(identity));
+        return identity;
+      }
 
-    if (user?.id != null) headers["x-telegram-id"] = String(user.id);
-    if (user?.username) headers["x-telegram-username"] = String(user.username);
-    if (user?.first_name) headers["x-telegram-first-name"] = String(user.first_name);
-    if (user?.last_name) headers["x-telegram-last-name"] = String(user.last_name);
-    if (initData) headers["x-telegram-init-data"] = initData;
+      const search = new URLSearchParams(window.location.search || "");
+      const hashRaw = String(window.location.hash || "").replace(/^#/, "");
+      const hash = new URLSearchParams(hashRaw);
+      const webAppData = search.get("tgWebAppData") || hash.get("tgWebAppData");
+      if (webAppData) {
+        const init = new URLSearchParams(webAppData);
+        const userRaw = init.get("user");
+        if (userRaw) {
+          const parsedUser = JSON.parse(userRaw);
+          if (parsedUser?.id) {
+            const identity: TelegramIdentity = {
+              id: String(parsedUser.id),
+              username: String(parsedUser.username || `${parsedUser.first_name || ""} ${parsedUser.last_name || ""}`.trim() || "TelegramUser"),
+              firstName: String(parsedUser.first_name || ""),
+              lastName: String(parsedUser.last_name || ""),
+              initDataRaw: String(webAppData),
+            };
+            localStorage.setItem("tg_identity_cache", JSON.stringify(identity));
+            return identity;
+          }
+        }
+      }
 
-    return headers;
-  };
-
-  const getTelegramIdentityBody = (): Record<string, string> => {
-    const tg = (window as any)?.Telegram?.WebApp;
-    const user = tg?.initDataUnsafe?.user;
-    const initData = typeof tg?.initData === "string" ? tg.initData : "";
-
-    return {
-      telegramId: user?.id != null ? String(user.id) : "",
-      telegramUsername: user?.username ? String(user.username) : "",
-      telegramFirstName: user?.first_name ? String(user.first_name) : "",
-      telegramLastName: user?.last_name ? String(user.last_name) : "",
-      telegramInitData: initData || "",
-    };
+      const cachedRaw = localStorage.getItem("tg_identity_cache");
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw);
+        if (cached?.id) return cached as TelegramIdentity;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   };
 
   const form = useForm<z.infer<typeof depositSchema>>({
@@ -141,16 +171,30 @@ export default function DepositMethod() {
     }
 
     if (method.code === "sham_cash_auto") {
-      fetch(`${apiBaseUrl}/api/deposits/shamcash/invoice`, {
+      const tg = readTelegramIdentity();
+      const invoiceUrl =
+        tg?.id
+          ? `${apiBaseUrl}/api/deposits/shamcash/invoice?tg_id=${encodeURIComponent(tg.id)}&tg_username=${encodeURIComponent(tg.username || "")}`
+          : `${apiBaseUrl}/api/deposits/shamcash/invoice`;
+
+      fetch(invoiceUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...getTelegramIdentityHeaders(),
+          ...(tg?.id ? { "x-telegram-id": tg.id } : {}),
+          ...(tg?.username ? { "x-telegram-username": tg.username } : {}),
+          ...(tg?.firstName ? { "x-telegram-first-name": tg.firstName } : {}),
+          ...(tg?.lastName ? { "x-telegram-last-name": tg.lastName } : {}),
+          ...(tg?.initDataRaw ? { "x-telegram-init-data": tg.initDataRaw } : {}),
         },
         body: JSON.stringify({
           amount: values.amount,
           currency: values.currency,
-          ...getTelegramIdentityBody(),
+          telegramId: tg?.id || "",
+          telegramUsername: tg?.username || "",
+          telegramFirstName: tg?.firstName || "",
+          telegramLastName: tg?.lastName || "",
+          telegramInitData: tg?.initDataRaw || "",
         }),
       })
         .then(async (r) => {
