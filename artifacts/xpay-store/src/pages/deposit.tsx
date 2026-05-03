@@ -29,11 +29,12 @@ export default function Deposit() {
   });
 
   const getMethodIcon = (method: Pick<UiMethod, "code" | "qrImage">) => {
-    if ((method.code === "sham_cash" || method.code === "sham_cash_auto") && method.qrImage) {
+    // Any payment method can provide its own logo from admin (qrImage field).
+    if (method.qrImage) {
       return (
         <img
           src={method.qrImage}
-          alt="ShamCash"
+          alt="Payment logo"
           className="w-10 h-10 rounded-lg object-contain bg-white p-1"
           loading="lazy"
         />
