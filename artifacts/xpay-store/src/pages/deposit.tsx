@@ -1,7 +1,7 @@
 import { useListPaymentMethods, getListPaymentMethodsQueryKey } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wallet, Smartphone, Landmark, ShieldCheck, ChevronLeft } from "lucide-react";
+import { Wallet, Smartphone, Landmark, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function Deposit() {
@@ -9,8 +9,19 @@ export default function Deposit() {
     query: { queryKey: getListPaymentMethodsQueryKey() }
   });
 
-  const getMethodIcon = (code: string) => {
-    switch (code) {
+  const getMethodIcon = (method: { code: string; qrImage?: string }) => {
+    if ((method.code === "sham_cash" || method.code === "sham_cash_auto") && method.qrImage) {
+      return (
+        <img
+          src={method.qrImage}
+          alt="ShamCash"
+          className="w-10 h-10 rounded-lg object-contain bg-white p-1"
+          loading="lazy"
+        />
+      );
+    }
+
+    switch (method.code) {
       case 'binance_pay':
       case 'usdt_auto':
         return <ShieldCheck className="w-8 h-8 text-[#FCD535]" />;
@@ -19,6 +30,7 @@ export default function Deposit() {
       case 'mtn_cash':
         return <Smartphone className="w-8 h-8 text-[#FFCC00]" />;
       case 'sham_cash':
+      case 'sham_cash_auto':
       default:
         return <Landmark className="w-8 h-8 text-primary" />;
     }
@@ -30,7 +42,9 @@ export default function Deposit() {
       case 'usdt_auto': return 'border-[#26A17B]/30 hover:border-[#26A17B] bg-[#26A17B]/5';
       case 'syriatel_cash': return 'border-[#E31837]/30 hover:border-[#E31837] bg-[#E31837]/5';
       case 'mtn_cash': return 'border-[#FFCC00]/30 hover:border-[#FFCC00] bg-[#FFCC00]/5';
-      case 'sham_cash': default: return 'border-primary/30 hover:border-primary bg-primary/5';
+      case 'sham_cash':
+      case 'sham_cash_auto':
+      default: return 'border-primary/30 hover:border-primary bg-primary/5';
     }
   };
 
@@ -61,7 +75,7 @@ export default function Deposit() {
                 className={`p-5 rounded-3xl border border-white/5 bg-card hover:bg-white/5 transition-all cursor-pointer h-full flex flex-col items-center justify-center text-center group ${getMethodColor(method.code)}`}
               >
                 <div className="mb-3 transform group-hover:scale-110 transition-transform duration-300">
-                  {getMethodIcon(method.code)}
+                  {getMethodIcon(method)}
                 </div>
                 <h3 className="font-bold text-foreground text-sm mb-1">{method.name}</h3>
                 <p className="text-[10px] text-muted-foreground">{method.subtitle}</p>
