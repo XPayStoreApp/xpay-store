@@ -81,11 +81,22 @@ function clampLightness(hsl: string, delta: number): string {
   return `${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%`;
 }
 
+function clampMaxLightness(hsl: string, maxL: number): string {
+  const match = String(hsl).match(/^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/);
+  if (!match) return hsl;
+
+  const h = Number(match[1]);
+  const s = Number(match[2]);
+  const l = Math.min(maxL, Math.max(0, Number(match[3])));
+  return `${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%`;
+}
+
 function applyTheme(theme: StoreTheme) {
   const root = document.documentElement;
   const primary = hexToHslString(theme.primary, "185 100% 50%");
   const accent = hexToHslString(theme.accent, "24 95% 53%");
-  const background = hexToHslString(theme.background, "215 60% 10%");
+  const backgroundRaw = hexToHslString(theme.background, "215 60% 10%");
+  const background = clampMaxLightness(backgroundRaw, 18);
   const radiusValue = Number(theme.radius);
   const radius = Number.isFinite(radiusValue) && radiusValue > 0 ? `${radiusValue}px` : "16px";
   const font = String(theme.font || "Cairo").trim() || "Cairo";

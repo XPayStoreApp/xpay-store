@@ -5,7 +5,7 @@ import { Save, Palette } from "lucide-react";
 const FIELDS = [
   { key: "theme_primary", label: "اللون الرئيسي", type: "color", default: "#0052CC" },
   { key: "theme_accent", label: "اللون الثانوي", type: "color", default: "#F97316" },
-  { key: "theme_bg", label: "خلفية المتجر", type: "color", default: "#F4F6FB" },
+  { key: "theme_bg", label: "خلفية المتجر", type: "color", default: "#0A1628" },
   { key: "theme_font", label: "الخط", type: "text", default: "Cairo" },
   { key: "theme_radius", label: "نصف القطر (px)", type: "number", default: "12" },
 ];
