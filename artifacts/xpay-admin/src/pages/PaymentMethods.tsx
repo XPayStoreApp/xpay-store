@@ -1,4 +1,5 @@
 import Crud from "../components/Crud";
+
 export default function PaymentMethods() {
   return (
     <Crud
@@ -11,9 +12,10 @@ export default function PaymentMethods() {
           type: "select",
           required: true,
           options: [
-            { value: "sham_cash", label: "شام كاش" },
+            { value: "sham_cash", label: "شام كاش (يدوي)" },
+            { value: "sham_cash_auto", label: "شام كاش (تلقائي)" },
             { value: "binance_pay", label: "Binance Pay" },
-            { value: "syriatel_cash", label: "سيرياتيل كاش" },
+            { value: "syriatel_cash", label: "سيريتل كاش" },
             { value: "mtn_cash", label: "MTN كاش" },
             { value: "usdt_auto", label: "USDT تلقائي" },
           ],

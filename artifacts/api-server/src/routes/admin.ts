@@ -77,6 +77,12 @@ function toHttpError(error: any): { status: number; message: string } {
 
   const pg = findPgError(error);
   if (pg) {
+    if (pg.code === "23505") {
+      return {
+        status: 400,
+        message: "القيمة المدخلة موجودة مسبقًا (حقل فريد). عدّل الكود أو استخدم قيمة مختلفة.",
+      };
+    }
     if (pg.code === "23503") {
       return { status: 400, message: `Foreign key violation: ${pg?.detail || pg?.constraint || "invalid reference"}` };
     }
