@@ -87,6 +87,7 @@ export type PaymentMethodCode =
 
 export const PaymentMethodCode = {
   sham_cash: "sham_cash",
+  sham_cash_auto: "sham_cash_auto",
   binance_pay: "binance_pay",
   syriatel_cash: "syriatel_cash",
   mtn_cash: "mtn_cash",

@@ -1,4 +1,4 @@
-import { useRoute, Link, useLocation } from "wouter";
+﻿import { useRoute, Link, useLocation } from "wouter";
 import { ChevronRight, Copy, AlertTriangle } from "lucide-react";
 import {
   useListPaymentMethods,
@@ -32,11 +32,8 @@ import {
 
 const depositSchema = z.object({
   currency: z.enum(["USD", "SYP"]),
-  amount: z.coerce.number().positive("المبلغ يجب أن يكون أكبر من صفر"),
-  transactionId: z
-    .string()
-    .regex(/^\d+$/, "رقم العملية يجب أن يحتوي على أرقام فقط")
-    .min(3, "رقم العملية مطلوب"),
+  amount: z.coerce.number().positive("ط§ظ„ظ…ط¨ظ„ط؛ ظٹط¬ط¨ ط£ظ† ظٹظƒظˆظ† ط£ظƒط¨ط± ظ…ظ† طµظپط±"),
+  transactionId: z.string().optional(),
   proofImage: z.string().optional(),
 });
 
@@ -92,7 +89,36 @@ export default function DepositMethod() {
       values.proofImage.startsWith("data:") &&
       values.proofImage.length > 1_500_000
     ) {
-      toast.error("حجم صورة الإيصال كبير. اختر صورة أصغر أو استخدم رابط صورة.");
+      toast.error("ط­ط¬ظ… طµظˆط±ط© ط§ظ„ط¥ظٹطµط§ظ„ ظƒط¨ظٹط±. ط§ط®طھط± طµظˆط±ط© ط£طµط؛ط± ط£ظˆ ط§ط³طھط®ط¯ظ… ط±ط§ط¨ط· طµظˆط±ط©.");
+      return;
+    }
+
+    if (method.code === "sham_cash_auto") {
+      fetch("/api/deposits/shamcash/invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: values.amount,
+          currency: values.currency,
+        }),
+      })
+        .then(async (r) => {
+          const payload = await r.json().catch(() => ({}));
+          if (!r.ok || !payload?.paymentUrl) {
+            throw new Error(payload?.error || payload?.message || "failed_to_create_invoice");
+          }
+          queryClient.invalidateQueries({ queryKey: ["/api/deposits"] });
+          window.location.href = String(payload.paymentUrl);
+        })
+        .catch((err: any) => {
+          toast.error(err?.message || "ظپط´ظ„ ط¥ظ†ط´ط§ط، ظپط§طھظˆط±ط© ط´ط§ظ… ظƒط§ط´");
+        });
+      return;
+    }
+
+    const transactionId = String(values.transactionId || "").trim();
+    if (!/^\d{3,}$/.test(transactionId)) {
+      toast.error("رقم العملية يجب أن يحتوي على أرقام فقط وبحد أدنى 3 خانات");
       return;
     }
 
@@ -102,13 +128,13 @@ export default function DepositMethod() {
           method: method.code,
           currency: values.currency,
           amount: values.amount,
-          transactionId: values.transactionId,
+          transactionId,
           proofImage: values.proofImage || undefined,
         } as any,
       },
       {
         onSuccess: () => {
-          toast.success("تم إرسال طلب الإيداع بنجاح");
+          toast.success("طھظ… ط¥ط±ط³ط§ظ„ ط·ظ„ط¨ ط§ظ„ط¥ظٹط¯ط§ط¹ ط¨ظ†ط¬ط§ط­");
           queryClient.invalidateQueries({ queryKey: ["/api/me"] });
           queryClient.invalidateQueries({ queryKey: ["/api/deposits"] });
           setLocation("/deposits");
@@ -118,7 +144,7 @@ export default function DepositMethod() {
             err?.response?.data?.error ||
             err?.response?.data?.message ||
             err?.message;
-          toast.error(apiError || "حدث خطأ أثناء الإرسال");
+          toast.error(apiError || "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ط§ظ„ط¥ط±ط³ط§ظ„");
         },
       },
     );
@@ -126,7 +152,7 @@ export default function DepositMethod() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success("تم النسخ بنجاح");
+    toast.success("طھظ… ط§ظ„ظ†ط³ط® ط¨ظ†ط¬ط§ط­");
   };
 
   if (isLoading) {
@@ -142,7 +168,7 @@ export default function DepositMethod() {
   if (!method) {
     return (
       <div className="p-4 text-center mt-20 text-muted-foreground">
-        طريقة الدفع غير موجودة
+        ط·ط±ظٹظ‚ط© ط§ظ„ط¯ظپط¹ ط؛ظٹط± ظ…ظˆط¬ظˆط¯ط©
       </div>
     );
   }
@@ -221,7 +247,7 @@ export default function DepositMethod() {
             {method.walletAddress && (
               <div className="bg-background/80 backdrop-blur-sm p-4 rounded-2xl border border-white/5">
                 <div className="text-xs text-muted-foreground mb-2">
-                  عنوان المحفظة / الرقم:
+                  ط¹ظ†ظˆط§ظ† ط§ظ„ظ…ط­ظپط¸ط© / ط§ظ„ط±ظ‚ظ…:
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <div className="font-mono text-sm font-bold truncate select-all">
@@ -252,13 +278,13 @@ export default function DepositMethod() {
         <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-4 flex gap-3 text-destructive">
           <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
           <div className="text-xs leading-relaxed space-y-1 font-medium">
-            <p>يرجى إدخال رقم عملية صحيح أو رفع إيصال واضح.</p>
-            <p>الطلبات ترسل مباشرة إلى مجموعة المشرفين للمراجعة.</p>
+            <p>ظٹط±ط¬ظ‰ ط¥ط¯ط®ط§ظ„ ط±ظ‚ظ… ط¹ظ…ظ„ظٹط© طµط­ظٹط­ ط£ظˆ ط±ظپط¹ ط¥ظٹطµط§ظ„ ظˆط§ط¶ط­.</p>
+            <p>ط§ظ„ط·ظ„ط¨ط§طھ طھط±ط³ظ„ ظ…ط¨ط§ط´ط±ط© ط¥ظ„ظ‰ ظ…ط¬ظ…ظˆط¹ط© ط§ظ„ظ…ط´ط±ظپظٹظ† ظ„ظ„ظ…ط±ط§ط¬ط¹ط©.</p>
           </div>
         </div>
 
         <div className="bg-card border border-white/5 rounded-3xl p-5 shadow-lg">
-          <h3 className="font-bold text-foreground mb-4">تفاصيل التحويل</h3>
+          <h3 className="font-bold text-foreground mb-4">طھظپط§طµظٹظ„ ط§ظ„طھط­ظˆظٹظ„</h3>
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -267,16 +293,16 @@ export default function DepositMethod() {
                 name="currency"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>العملة</FormLabel>
+                    <FormLabel>ط§ظ„ط¹ظ…ظ„ط©</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger className="h-12 bg-background border-white/5 rounded-xl">
-                          <SelectValue placeholder="اختر العملة" />
+                          <SelectValue placeholder="ط§ط®طھط± ط§ظ„ط¹ظ…ظ„ط©" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="USD">دولار أمريكي (USD)</SelectItem>
-                        <SelectItem value="SYP">ليرة سورية (SYP)</SelectItem>
+                        <SelectItem value="USD">ط¯ظˆظ„ط§ط± ط£ظ…ط±ظٹظƒظٹ (USD)</SelectItem>
+                        <SelectItem value="SYP">ظ„ظٹط±ط© ط³ظˆط±ظٹط© (SYP)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -289,11 +315,11 @@ export default function DepositMethod() {
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>المبلغ المحول</FormLabel>
+                    <FormLabel>ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ظ…ط­ظˆظ„</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
-                        placeholder="أدخل المبلغ..."
+                        placeholder="ط£ط¯ط®ظ„ ط§ظ„ظ…ط¨ظ„ط؛..."
                         {...field}
                         className="h-12 bg-background border-white/5 rounded-xl text-base"
                       />
@@ -303,36 +329,38 @@ export default function DepositMethod() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="transactionId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>رقم العملية (Transaction ID/Ref)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        placeholder="أدخل رقم عملية التحويل..."
-                        {...field}
-                        onChange={(e) =>
-                          field.onChange(e.target.value.replace(/\D+/g, ""))
-                        }
-                        className="h-12 bg-background border-white/5 rounded-xl text-base font-mono"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {method.code !== "sham_cash_auto" ? (
+                <FormField
+                  control={form.control}
+                  name="transactionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>ط±ظ‚ظ… ط§ظ„ط¹ظ…ظ„ظٹط© (Transaction ID/Ref)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          placeholder="ط£ط¯ط®ظ„ ط±ظ‚ظ… ط¹ظ…ظ„ظٹط© ط§ظ„طھط­ظˆظٹظ„..."
+                          {...field}
+                          onChange={(e) =>
+                            field.onChange(e.target.value.replace(/\D+/g, ""))
+                          }
+                          className="h-12 bg-background border-white/5 rounded-xl text-base font-mono"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : null}
 
               <FormField
                 control={form.control}
                 name="proofImage"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>صورة الإيصال (اختياري)</FormLabel>
+                    <FormLabel>طµظˆط±ط© ط§ظ„ط¥ظٹطµط§ظ„ (ط§ط®طھظٹط§ط±ظٹ)</FormLabel>
                     <FormControl>
                       <div className="space-y-2">
                         <Input
@@ -342,14 +370,14 @@ export default function DepositMethod() {
                           className="h-12 bg-background border-white/5 rounded-xl text-base"
                         />
                         <Input
-                          placeholder="أو رابط صورة الإيصال"
+                          placeholder="ط£ظˆ ط±ط§ط¨ط· طµظˆط±ط© ط§ظ„ط¥ظٹطµط§ظ„"
                           value={field.value || ""}
                           onChange={(e) => field.onChange(e.target.value)}
                           className="h-12 bg-background border-white/5 rounded-xl text-base"
                         />
                         {proofImageName ? (
                           <div className="text-xs text-muted-foreground">
-                            الملف المحدد: {proofImageName}
+                            ط§ظ„ظ…ظ„ظپ ط§ظ„ظ…ط­ط¯ط¯: {proofImageName}
                           </div>
                         ) : null}
                       </div>
@@ -365,7 +393,7 @@ export default function DepositMethod() {
                   disabled={createDeposit.isPending}
                   className={`w-full h-14 rounded-2xl text-base font-bold text-white shadow-lg ${themeBg} hover:opacity-90 transition-opacity`}
                 >
-                  {createDeposit.isPending ? "جاري الإرسال..." : "تأكيد الدفع"}
+                  {createDeposit.isPending ? "ط¬ط§ط±ظٹ ط§ظ„ط¥ط±ط³ط§ظ„..." : "طھط£ظƒظٹط¯ ط§ظ„ط¯ظپط¹"}
                 </Button>
               </div>
             </form>
@@ -375,3 +403,4 @@ export default function DepositMethod() {
     </div>
   );
 }
+

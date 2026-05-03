@@ -11,7 +11,7 @@ router.get("/payment-methods", async (_req, res) => {
     ListPaymentMethodsResponse.parse(
       rows.map((m) => ({
         id: String(m.id),
-        code: m.code as "sham_cash" | "binance_pay" | "syriatel_cash" | "mtn_cash" | "usdt_auto",
+        code: m.code as "sham_cash" | "sham_cash_auto" | "binance_pay" | "syriatel_cash" | "mtn_cash" | "usdt_auto",
         name: m.name,
         subtitle: m.subtitle,
         instructions: m.instructions ?? undefined,

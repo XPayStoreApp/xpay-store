@@ -134,6 +134,7 @@ export const ListPaymentMethodsResponseItem = zod.object({
   id: zod.string(),
   code: zod.enum([
     "sham_cash",
+    "sham_cash_auto",
     "binance_pay",
     "syriatel_cash",
     "mtn_cash",

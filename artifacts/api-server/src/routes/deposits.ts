@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, depositsTable, paymentMethodsTable } from "@workspace/db";
+import { db, depositsTable, paymentMethodsTable, usersTable } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
   CreateDepositBody,
@@ -8,9 +8,76 @@ import {
   ListMyDepositsResponse,
 } from "@workspace/api-zod";
 import { getOrCreateCurrentUser } from "../lib/currentUser.js";
-import { notifyAdminsAboutDeposit } from "../lib/telegram.js";
+import {
+  notifyAdminsAboutDeposit,
+  notifyUserDepositApproved,
+  notifyUserDepositRejected,
+} from "../lib/telegram.js";
 
 const router: IRouter = Router();
+const SAM_API_BASE_URL = process.env.SAM_API_BASE_URL || "https://www.sam-api.pro/api";
+const SAM_API_KEY = process.env.SAM_API_KEY || "";
+const SAM_SHAMCASH_IDENTIFIER = process.env.SAM_SHAMCASH_IDENTIFIER || "";
+const SAM_WEBHOOK_SECRET = process.env.SAM_WEBHOOK_SECRET || "";
+const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL || process.env.RENDER_EXTERNAL_URL || "";
+
+function authHeaders() {
+  if (!SAM_API_KEY) throw new Error("SAM_API_KEY is missing");
+  return {
+    Authorization: `Bearer ${SAM_API_KEY}`,
+    "Content-Type": "application/json",
+  };
+}
+
+async function applyDepositStatusChangeAuto(id: number, status: "approved" | "rejected") {
+  const [dep] = await db.select().from(depositsTable).where(eq(depositsTable.id, id)).limit(1);
+  if (!dep) return { error: "not_found" as const };
+
+  if (status === "approved" && dep.status !== "approved") {
+    const col = dep.currency === "SYP" ? "balanceSyp" : "balanceUsd";
+    const amount = dep.currency === "SYP" ? dep.amountSyp : dep.amountUsd;
+    if (amount) {
+      await db
+        .update(usersTable)
+        .set({
+          [col]:
+            col === "balanceSyp"
+              ? sql`${usersTable.balanceSyp} + ${amount}`
+              : sql`${usersTable.balanceUsd} + ${amount}`,
+        })
+        .where(eq(usersTable.id, dep.userId));
+    }
+  }
+
+  const [updated] = await db
+    .update(depositsTable)
+    .set({ status })
+    .where(eq(depositsTable.id, id))
+    .returning();
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, dep.userId)).limit(1);
+  if (user) {
+    try {
+      if (status === "approved") {
+        await notifyUserDepositApproved({
+          telegramId: user.telegramId,
+          addedUsd: Number(dep.amountUsd),
+          currentUsd: Number(user.balanceUsd),
+          operationNumber: String(dep.id),
+        });
+      } else {
+        await notifyUserDepositRejected({
+          telegramId: user.telegramId,
+          operationNumber: String(dep.id),
+        });
+      }
+    } catch (error) {
+      console.error("Auto deposit notify failed:", error);
+    }
+  }
+
+  return { updated };
+}
 
 function rowToDeposit(d: typeof depositsTable.$inferSelect) {
   return {
@@ -108,6 +175,191 @@ router.post("/deposits", async (req, res) => {
     console.error("Notify admins about deposit failed:", error);
   }
   res.json(CreateDepositResponse.parse(rowToDeposit(dep)));
+});
+
+router.post("/deposits/shamcash/invoice", async (req, res) => {
+  try {
+    if (!SAM_API_KEY || !SAM_SHAMCASH_IDENTIFIER || !PUBLIC_API_BASE_URL) {
+      res.status(500).json({
+        error: "SAM config missing",
+        required: ["SAM_API_KEY", "SAM_SHAMCASH_IDENTIFIER", "PUBLIC_API_BASE_URL"],
+      });
+      return;
+    }
+
+    const user = await getOrCreateCurrentUser(req);
+    const currency = String(req.body?.currency || "SYP").toUpperCase();
+    const amount = Number(req.body?.amount);
+    if (!["USD", "SYP", "EUR"].includes(currency) || !Number.isFinite(amount) || amount <= 0) {
+      res.status(400).json({ error: "VALIDATION_ERROR" });
+      return;
+    }
+
+    const [methodRow] = await db
+      .select()
+      .from(paymentMethodsTable)
+      .where(eq(paymentMethodsTable.code, "sham_cash_auto"))
+      .limit(1);
+
+    const amountUsd = currency === "USD" ? amount : amount / 119;
+    const amountSyp = currency === "SYP" ? amount : amount * 119;
+
+    const [dep] = await db
+      .insert(depositsTable)
+      .values({
+        userId: user.id,
+        amountUsd: String(amountUsd.toFixed(4)),
+        amountSyp: String(amountSyp.toFixed(2)),
+        currency,
+        method: "sham_cash_auto",
+        methodLabel: methodRow?.name || "شام كاش تلقائي",
+        transactionId: `SC-PENDING-${Date.now()}-${user.id}`,
+        status: "pending",
+      })
+      .returning();
+
+    const webhookUrl = `${PUBLIC_API_BASE_URL.replace(/\/+$/, "")}/api/webhooks/shamcash?secret=${encodeURIComponent(SAM_WEBHOOK_SECRET)}`;
+
+    const invoiceResp = await fetch(`${SAM_API_BASE_URL.replace(/\/+$/, "")}/v1/invoices`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        method: "shamcash",
+        identifier: SAM_SHAMCASH_IDENTIFIER,
+        amount: String(amount),
+        currency,
+        webhookUrl,
+      }),
+    });
+
+    const invoiceJson: any = await invoiceResp.json().catch(() => ({}));
+    if (!invoiceResp.ok || !invoiceJson?.invoiceId || !invoiceJson?.paymentUrl) {
+      await db
+        .update(depositsTable)
+        .set({ status: "rejected" })
+        .where(eq(depositsTable.id, dep.id));
+      res.status(502).json({
+        error: "SAM_INVOICE_CREATE_FAILED",
+        details: invoiceJson,
+      });
+      return;
+    }
+
+    await db
+      .update(depositsTable)
+      .set({ transactionId: String(invoiceJson.invoiceId) })
+      .where(eq(depositsTable.id, dep.id));
+
+    res.json({
+      ok: true,
+      depositId: dep.id,
+      invoiceId: invoiceJson.invoiceId,
+      paymentUrl: invoiceJson.paymentUrl,
+      expiresAt: invoiceJson.expiresAt || null,
+    });
+  } catch (error: any) {
+    console.error("ShamCash invoice create failed:", error);
+    res.status(500).json({ error: error?.message || "failed_to_create_invoice" });
+  }
+});
+
+router.post("/deposits/shamcash/verify", async (req, res) => {
+  try {
+    if (!SAM_API_KEY) {
+      res.status(500).json({ error: "SAM_API_KEY missing" });
+      return;
+    }
+
+    const user = await getOrCreateCurrentUser(req);
+    const invoiceId = String(req.body?.invoiceId || "").trim();
+    const transactionRef = String(req.body?.transactionRef || "").trim();
+    if (!invoiceId || !transactionRef) {
+      res.status(400).json({ error: "invoiceId and transactionRef are required" });
+      return;
+    }
+
+    const [dep] = await db
+      .select()
+      .from(depositsTable)
+      .where(and(eq(depositsTable.userId, user.id), eq(depositsTable.transactionId, invoiceId)))
+      .limit(1);
+
+    if (!dep) {
+      res.status(404).json({ error: "deposit_not_found_for_invoice" });
+      return;
+    }
+
+    const verifyResp = await fetch(`${SAM_API_BASE_URL.replace(/\/+$/, "")}/pay/${encodeURIComponent(invoiceId)}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transactionRef }),
+    });
+
+    const verifyJson: any = await verifyResp.json().catch(() => ({}));
+
+    if (verifyResp.ok && verifyJson?.verified === true) {
+      await applyDepositStatusChangeAuto(dep.id, "approved");
+      res.json({ ok: true, verified: true, message: verifyJson?.message || "verified" });
+      return;
+    }
+
+    res.status(400).json({
+      ok: false,
+      verified: false,
+      message: verifyJson?.message || "verification_failed",
+      code: verifyJson?.code || null,
+    });
+  } catch (error: any) {
+    console.error("ShamCash verify failed:", error);
+    res.status(500).json({ error: error?.message || "verify_failed" });
+  }
+});
+
+router.post("/webhooks/shamcash", async (req, res) => {
+  try {
+    const secret = String(req.query.secret || "");
+    if (SAM_WEBHOOK_SECRET && secret !== SAM_WEBHOOK_SECRET) {
+      res.status(401).json({ error: "invalid_webhook_secret" });
+      return;
+    }
+
+    const event = String(req.body?.event || "");
+    const invoiceId = String(req.body?.invoiceId || "").trim();
+    if (!invoiceId) {
+      res.status(400).json({ error: "invoiceId is required" });
+      return;
+    }
+
+    const [dep] = await db
+      .select()
+      .from(depositsTable)
+      .where(eq(depositsTable.transactionId, invoiceId))
+      .limit(1);
+
+    if (!dep) {
+      res.status(200).json({ ok: true, ignored: "deposit_not_found" });
+      return;
+    }
+
+    if (event === "invoice.paid") {
+      await applyDepositStatusChangeAuto(dep.id, "approved");
+      res.status(200).json({ ok: true, status: "approved" });
+      return;
+    }
+
+    if (event === "invoice.expired") {
+      if (dep.status === "pending") {
+        await applyDepositStatusChangeAuto(dep.id, "rejected");
+      }
+      res.status(200).json({ ok: true, status: "expired" });
+      return;
+    }
+
+    res.status(200).json({ ok: true, ignored: "unsupported_event" });
+  } catch (error: any) {
+    console.error("ShamCash webhook failed:", error);
+    res.status(500).json({ error: error?.message || "webhook_failed" });
+  }
 });
 
 export default router;
