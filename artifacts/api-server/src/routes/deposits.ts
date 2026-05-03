@@ -188,7 +188,27 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
       return;
     }
 
-    const user = await getOrCreateCurrentUser(req);
+    const bodyIdentity = {
+      telegramId: String(req.body?.telegramId || "").trim(),
+      telegramUsername: String(req.body?.telegramUsername || "").trim(),
+      telegramFirstName: String(req.body?.telegramFirstName || "").trim(),
+      telegramLastName: String(req.body?.telegramLastName || "").trim(),
+      telegramInitData: String(req.body?.telegramInitData || "").trim(),
+    };
+
+    const reqWithFallbackHeaders: any = {
+      ...req,
+      headers: {
+        ...req.headers,
+        ...(req.headers["x-telegram-id"] ? {} : (bodyIdentity.telegramId ? { "x-telegram-id": bodyIdentity.telegramId } : {})),
+        ...(req.headers["x-telegram-username"] ? {} : (bodyIdentity.telegramUsername ? { "x-telegram-username": bodyIdentity.telegramUsername } : {})),
+        ...(req.headers["x-telegram-first-name"] ? {} : (bodyIdentity.telegramFirstName ? { "x-telegram-first-name": bodyIdentity.telegramFirstName } : {})),
+        ...(req.headers["x-telegram-last-name"] ? {} : (bodyIdentity.telegramLastName ? { "x-telegram-last-name": bodyIdentity.telegramLastName } : {})),
+        ...(req.headers["x-telegram-init-data"] ? {} : (bodyIdentity.telegramInitData ? { "x-telegram-init-data": bodyIdentity.telegramInitData } : {})),
+      },
+    };
+
+    const user = await getOrCreateCurrentUser(reqWithFallbackHeaders);
     const currency = String(req.body?.currency || "SYP").toUpperCase();
     const amount = Number(req.body?.amount);
     if (!["USD", "SYP", "EUR"].includes(currency) || !Number.isFinite(amount) || amount <= 0) {

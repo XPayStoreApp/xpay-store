@@ -87,6 +87,20 @@ export default function DepositMethod() {
     return headers;
   };
 
+  const getTelegramIdentityBody = (): Record<string, string> => {
+    const tg = (window as any)?.Telegram?.WebApp;
+    const user = tg?.initDataUnsafe?.user;
+    const initData = typeof tg?.initData === "string" ? tg.initData : "";
+
+    return {
+      telegramId: user?.id != null ? String(user.id) : "",
+      telegramUsername: user?.username ? String(user.username) : "",
+      telegramFirstName: user?.first_name ? String(user.first_name) : "",
+      telegramLastName: user?.last_name ? String(user.last_name) : "",
+      telegramInitData: initData || "",
+    };
+  };
+
   const form = useForm<z.infer<typeof depositSchema>>({
     resolver: zodResolver(depositSchema),
     defaultValues: {
@@ -136,6 +150,7 @@ export default function DepositMethod() {
         body: JSON.stringify({
           amount: values.amount,
           currency: values.currency,
+          ...getTelegramIdentityBody(),
         }),
       })
         .then(async (r) => {
