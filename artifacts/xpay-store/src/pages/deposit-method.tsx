@@ -70,6 +70,7 @@ export default function DepositMethod() {
   const [proofImageName, setProofImageName] = useState("");
 
   const method = (methods as UiMethod[] | undefined)?.find((m) => m.code === methodCode);
+  const apiBaseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
   const form = useForm<z.infer<typeof depositSchema>>({
     resolver: zodResolver(depositSchema),
@@ -111,7 +112,7 @@ export default function DepositMethod() {
     }
 
     if (method.code === "sham_cash_auto") {
-      fetch("/api/deposits/shamcash/invoice", {
+      fetch(`${apiBaseUrl}/api/deposits/shamcash/invoice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -120,9 +121,13 @@ export default function DepositMethod() {
         }),
       })
         .then(async (r) => {
-          const payload = await r.json().catch(() => ({}));
+          const payload = await r.json().catch(() => null);
           if (!r.ok || !payload?.paymentUrl) {
-            throw new Error(payload?.error || payload?.message || "failed_to_create_invoice");
+            throw new Error(
+              payload?.message ||
+              payload?.error ||
+              `invoice_http_${r.status}`
+            );
           }
 
           const invoiceId = String(payload.invoiceId || "");

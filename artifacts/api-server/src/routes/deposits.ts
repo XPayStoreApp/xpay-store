@@ -182,6 +182,7 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
     if (!SAM_API_KEY || !SAM_SHAMCASH_IDENTIFIER || !PUBLIC_API_BASE_URL) {
       res.status(500).json({
         error: "SAM config missing",
+        message: "Missing required server configuration for ShamCash auto invoice.",
         required: ["SAM_API_KEY", "SAM_SHAMCASH_IDENTIFIER", "PUBLIC_API_BASE_URL"],
       });
       return;
@@ -191,7 +192,7 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
     const currency = String(req.body?.currency || "SYP").toUpperCase();
     const amount = Number(req.body?.amount);
     if (!["USD", "SYP", "EUR"].includes(currency) || !Number.isFinite(amount) || amount <= 0) {
-      res.status(400).json({ error: "VALIDATION_ERROR" });
+      res.status(400).json({ error: "VALIDATION_ERROR", message: "Invalid amount or currency." });
       return;
     }
 
@@ -240,6 +241,7 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
         .where(eq(depositsTable.id, dep.id));
       res.status(502).json({
         error: "SAM_INVOICE_CREATE_FAILED",
+        message: invoiceJson?.message || "Sam API rejected invoice creation.",
         details: invoiceJson,
       });
       return;
@@ -259,7 +261,10 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
     });
   } catch (error: any) {
     console.error("ShamCash invoice create failed:", error);
-    res.status(500).json({ error: error?.message || "failed_to_create_invoice" });
+    res.status(500).json({
+      error: "SHAMCASH_INVOICE_EXCEPTION",
+      message: error?.message || "failed_to_create_invoice",
+    });
   }
 });
 
