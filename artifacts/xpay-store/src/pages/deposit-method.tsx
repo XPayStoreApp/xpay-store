@@ -72,6 +72,21 @@ export default function DepositMethod() {
   const method = (methods as UiMethod[] | undefined)?.find((m) => m.code === methodCode);
   const apiBaseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
+  const getTelegramIdentityHeaders = (): Record<string, string> => {
+    const tg = (window as any)?.Telegram?.WebApp;
+    const user = tg?.initDataUnsafe?.user;
+    const initData = typeof tg?.initData === "string" ? tg.initData : "";
+    const headers: Record<string, string> = {};
+
+    if (user?.id != null) headers["x-telegram-id"] = String(user.id);
+    if (user?.username) headers["x-telegram-username"] = String(user.username);
+    if (user?.first_name) headers["x-telegram-first-name"] = String(user.first_name);
+    if (user?.last_name) headers["x-telegram-last-name"] = String(user.last_name);
+    if (initData) headers["x-telegram-init-data"] = initData;
+
+    return headers;
+  };
+
   const form = useForm<z.infer<typeof depositSchema>>({
     resolver: zodResolver(depositSchema),
     defaultValues: {
@@ -114,7 +129,10 @@ export default function DepositMethod() {
     if (method.code === "sham_cash_auto") {
       fetch(`${apiBaseUrl}/api/deposits/shamcash/invoice`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getTelegramIdentityHeaders(),
+        },
         body: JSON.stringify({
           amount: values.amount,
           currency: values.currency,
