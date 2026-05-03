@@ -9,6 +9,7 @@ type UiMethod = {
   code: string;
   name: string;
   subtitle: string;
+  logoImage?: string;
   qrImage?: string;
   active: boolean;
 };
@@ -28,12 +29,12 @@ export default function Deposit() {
     query: { queryKey: getListPaymentMethodsQueryKey() },
   });
 
-  const getMethodIcon = (method: Pick<UiMethod, "code" | "qrImage">) => {
-    // Any payment method can provide its own logo from admin (qrImage field).
-    if (method.qrImage) {
+  const getMethodIcon = (method: Pick<UiMethod, "code" | "logoImage">) => {
+    // Any payment method can provide its own logo from admin (logoImage field).
+    if (method.logoImage) {
       return (
         <img
-          src={method.qrImage}
+          src={method.logoImage}
           alt="Payment logo"
           className="w-10 h-10 rounded-lg object-contain bg-white p-1"
           loading="lazy"

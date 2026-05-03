@@ -668,6 +668,7 @@ makeCrud("payment-methods", paymentMethodsTable, {
     "subtitle",
     "instructions",
     "walletAddress",
+    "logoImage",
     "qrImage",
     "minAmount",
     "active",
@@ -1194,7 +1195,7 @@ const PUT_RESOURCES: Array<{ path: string; table: any; allowed: string[] }> = [
     path: "payment-methods",
     table: paymentMethodsTable,
     allowed: [
-      "code", "name", "subtitle", "instructions", "walletAddress", "qrImage",
+      "code", "name", "subtitle", "instructions", "walletAddress", "logoImage", "qrImage",
       "minAmount", "active",
     ],
   },

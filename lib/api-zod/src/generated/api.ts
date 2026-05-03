@@ -144,6 +144,7 @@ export const ListPaymentMethodsResponseItem = zod.object({
   subtitle: zod.string(),
   instructions: zod.string().optional(),
   walletAddress: zod.string().optional(),
+  logoImage: zod.string().optional(),
   qrImage: zod.string().optional(),
   minAmount: zod.number(),
   active: zod.boolean(),

@@ -16,6 +16,7 @@ router.get("/payment-methods", async (_req, res) => {
         subtitle: m.subtitle,
         instructions: m.instructions ?? undefined,
         walletAddress: m.walletAddress ?? undefined,
+        logoImage: m.logoImage ?? undefined,
         qrImage: m.qrImage ?? undefined,
         minAmount: Number(m.minAmount),
         active: m.active,

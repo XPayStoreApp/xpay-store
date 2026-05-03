@@ -24,7 +24,8 @@ export default function PaymentMethods() {
         { name: "subtitle", label: "العنوان الفرعي", type: "text", required: true },
         { name: "instructions", label: "التعليمات", type: "textarea", hideInTable: true },
         { name: "walletAddress", label: "عنوان المحفظة", type: "text", hideInTable: true },
-        { name: "qrImage", label: "شعار الوسيلة (رابط صورة)", type: "text", hideInTable: true },
+        { name: "logoImage", label: "لوغو الوسيلة (رابط صورة)", type: "text", hideInTable: true },
+        { name: "qrImage", label: "QR الوسيلة (رابط صورة)", type: "text", hideInTable: true },
         { name: "minAmount", label: "أقل مبلغ", type: "number", default: 1, step: "0.01" },
         { name: "active", label: "مفعل", type: "boolean", default: true },
       ]}

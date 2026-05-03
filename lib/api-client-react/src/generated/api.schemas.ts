@@ -101,6 +101,7 @@ export interface PaymentMethod {
   subtitle: string;
   instructions?: string;
   walletAddress?: string;
+  logoImage?: string;
   qrImage?: string;
   minAmount: number;
   active: boolean;
