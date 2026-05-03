@@ -79,6 +79,54 @@ async function applyDepositStatusChangeAuto(id: number, status: "approved" | "re
   return { updated };
 }
 
+async function syncShamCashInvoiceStatus(invoiceId: string): Promise<{
+  found: boolean;
+  status?: string;
+  synced?: "approved" | "rejected" | "pending";
+}> {
+  const cleanInvoiceId = String(invoiceId || "").trim();
+  if (!cleanInvoiceId) return { found: false };
+
+  const [dep] = await db
+    .select()
+    .from(depositsTable)
+    .where(eq(depositsTable.transactionId, cleanInvoiceId))
+    .limit(1);
+  if (!dep) return { found: false };
+  if (dep.status !== "pending") return { found: true, status: dep.status, synced: dep.status as any };
+
+  const payResp = await fetch(`${SAM_API_BASE_URL.replace(/\/+$/, "")}/pay/${encodeURIComponent(cleanInvoiceId)}`);
+  const payJson: any = await payResp.json().catch(() => ({}));
+  const samStatus = String(payJson?.status || "").toLowerCase();
+
+  if (samStatus === "paid") {
+    await applyDepositStatusChangeAuto(dep.id, "approved");
+    return { found: true, status: samStatus, synced: "approved" };
+  }
+  if (samStatus === "expired") {
+    await applyDepositStatusChangeAuto(dep.id, "rejected");
+    return { found: true, status: samStatus, synced: "rejected" };
+  }
+  return { found: true, status: samStatus || "pending", synced: "pending" };
+}
+
+async function syncPendingShamCashDepositsForUser(userId: number): Promise<void> {
+  const pending = await db
+    .select({ transactionId: depositsTable.transactionId })
+    .from(depositsTable)
+    .where(and(eq(depositsTable.userId, userId), eq(depositsTable.method, "sham_cash_auto"), eq(depositsTable.status, "pending")))
+    .orderBy(desc(depositsTable.id))
+    .limit(10);
+
+  for (const dep of pending) {
+    try {
+      await syncShamCashInvoiceStatus(String(dep.transactionId || ""));
+    } catch (error) {
+      console.error("ShamCash pending sync failed:", error);
+    }
+  }
+}
+
 function rowToDeposit(d: typeof depositsTable.$inferSelect) {
   return {
     id: String(d.id),
@@ -95,6 +143,7 @@ function rowToDeposit(d: typeof depositsTable.$inferSelect) {
 
 router.get("/deposits", async (req, res) => {
   const user = await getOrCreateCurrentUser(req);
+  await syncPendingShamCashDepositsForUser(user.id);
   const status = (req.query.status as string | undefined) ?? "all";
   const method = (req.query.method as string | undefined) ?? "all";
   const conds = [eq(depositsTable.userId, user.id)];
@@ -110,6 +159,7 @@ router.get("/deposits", async (req, res) => {
 
 router.get("/deposits/summary", async (_req, res) => {
   const user = await getOrCreateCurrentUser(_req);
+  await syncPendingShamCashDepositsForUser(user.id);
   const all = await db
     .select({
       total: sql<number>`coalesce(sum(case when status='approved' then amount_usd else 0 end), 0)::float`,
@@ -128,6 +178,33 @@ router.get("/deposits/summary", async (_req, res) => {
       totalCount: r.totalCount,
     }),
   );
+});
+
+router.post("/deposits/shamcash/:invoiceId/sync", async (req, res) => {
+  try {
+    const user = await getOrCreateCurrentUser(req);
+    const invoiceId = String(req.params.invoiceId || "").trim();
+    if (!invoiceId) {
+      res.status(400).json({ error: "invoiceId is required" });
+      return;
+    }
+
+    const [dep] = await db
+      .select()
+      .from(depositsTable)
+      .where(and(eq(depositsTable.userId, user.id), eq(depositsTable.transactionId, invoiceId)))
+      .limit(1);
+    if (!dep) {
+      res.status(404).json({ error: "deposit_not_found_for_invoice" });
+      return;
+    }
+
+    const result = await syncShamCashInvoiceStatus(invoiceId);
+    res.json({ ok: true, ...result });
+  } catch (error: any) {
+    console.error("ShamCash manual sync failed:", error);
+    res.status(500).json({ error: error?.message || "sync_failed" });
+  }
 });
 
 router.post("/deposits", async (req, res) => {
