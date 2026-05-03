@@ -471,6 +471,36 @@ async function hasColumn(tableName: string, columnName: string): Promise<boolean
   return exists;
 }
 
+async function fetchProviderLiveCostUsd(providerId: number, providerProductId: number): Promise<number> {
+  const [provider] = await db
+    .select()
+    .from(providersTable)
+    .where(eq(providersTable.id, providerId))
+    .limit(1);
+
+  if (!provider) {
+    throw new ValidationError(`providerId ${providerId} does not exist`);
+  }
+
+  const adapter = getAdapter(provider.providerType || "custom");
+  if (!adapter) {
+    throw new ValidationError(`unsupported providerType: ${provider.providerType}`);
+  }
+
+  const remoteProducts = await adapter.fetchProducts(provider.apiKey!, provider.apiUrl || undefined);
+  const remote = remoteProducts.find((p) => Number(p.id) === Number(providerProductId));
+  if (!remote) {
+    throw new ValidationError(`providerProductId ${providerProductId} was not found at provider ${providerId}`);
+  }
+
+  const remotePrice = Number(remote.price);
+  if (!Number.isFinite(remotePrice)) {
+    throw new ValidationError(`provider product price is invalid for providerProductId ${providerProductId}`);
+  }
+
+  return remotePrice;
+}
+
 async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promise<any> {
   if (!data || typeof data !== "object") return data;
   const normalized: Record<string, any> = { ...data };
@@ -544,6 +574,15 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
         .where(eq(providersTable.id, Number(normalized.providerId)))
         .limit(1);
       if (!provider) throw new ValidationError(`providerId ${normalized.providerId} does not exist`);
+    }
+
+    if (normalized.providerId != null && normalized.providerProductId != null) {
+      const providerCostUsd = await fetchProviderLiveCostUsd(
+        Number(normalized.providerId),
+        Number(normalized.providerProductId),
+      );
+      normalized.basePriceUsd = providerCostUsd;
+      normalized.source = "provider";
     }
   }
 
@@ -1443,9 +1482,7 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
           UPDATE products SET
             name = ${p.name},
             image = ${p.categoryImage || "/cat-cards.png"},
-            price_usd = ${String(p.price)},
-            price_syp = '0',
-            base_price_usd = ${p.basePrice ? String(p.basePrice) : null},
+            base_price_usd = ${String(p.price)},
             product_type = ${p.productType},
             available = ${p.available},
             min_qty = ${p.minQty ? String(p.minQty) : null},
@@ -1595,7 +1632,9 @@ router.get("/admin/products/:id/provider-status", requireAdmin, async (req, res)
     const remoteProducts = await adapter.fetchProducts(provider.apiKey!, provider.apiUrl || undefined);
     const remote = remoteProducts.find((p) => Number(p.id) === Number(product.providerProductId));
     const remotePrice = remote?.price != null ? Number(remote.price) : null;
-    const localPrice = Number(product.priceUsd);
+    const localMarkup = Number(product.priceUsd);
+    const localBaseCost = product.basePriceUsd != null ? Number(product.basePriceUsd) : null;
+    const localFinalPrice = localBaseCost != null ? localBaseCost + localMarkup : localMarkup;
 
     res.json({
       ok: true,
@@ -1613,7 +1652,9 @@ router.get("/admin/products/:id/provider-status", requireAdmin, async (req, res)
         name: product.name,
         source: product.source,
         localProviderProductId: product.providerProductId,
-        localPriceUsd: localPrice,
+        localMarkupUsd: localMarkup,
+        localBaseCostUsd: localBaseCost,
+        localFinalPriceUsd: localFinalPrice,
       },
       remote: remote
         ? {
@@ -1626,7 +1667,10 @@ router.get("/admin/products/:id/provider-status", requireAdmin, async (req, res)
             maxQty: remote.maxQty ?? null,
           }
         : null,
-      priceDiffUsd: remotePrice != null ? Number((localPrice - remotePrice).toFixed(6)) : null,
+      baseCostDiffUsd:
+        remotePrice != null && localBaseCost != null
+          ? Number((localBaseCost - remotePrice).toFixed(6))
+          : null,
       message: remote
         ? "تم العثور على المنتج عند المزوّد الخارجي."
         : "لم يتم العثور على providerProductId في قائمة منتجات المزوّد.",

@@ -313,16 +313,21 @@ router.post("/orders", async (req, res) => {
     }
   }
 
-  // 3) Final price = provider live price + dashboard configured price.
+  // 3) Final price = provider live/base cost + dashboard markup.
   // For non-provider products, keep dashboard price only.
-  const dashboardUnitPriceUsd = Number(product.priceUsd);
+  const dashboardMarkupUsd = Number(product.priceUsd);
+  const storedBaseCostUsd = product.basePriceUsd != null ? Number(product.basePriceUsd) : 0;
   const providerUnitPriceUsd =
     product.providerId
-      ? liveProviderUnitPrice || (providerOrderResult?.price ? Number(providerOrderResult.price) / body.quantity : 0)
+      ? (
+          liveProviderUnitPrice ||
+          (providerOrderResult?.price ? Number(providerOrderResult.price) / body.quantity : 0) ||
+          storedBaseCostUsd
+        )
       : 0;
   const finalUnitPriceUsd = product.providerId
-    ? providerUnitPriceUsd + dashboardUnitPriceUsd
-    : dashboardUnitPriceUsd;
+    ? providerUnitPriceUsd + dashboardMarkupUsd
+    : dashboardMarkupUsd;
 
   const totalUsd = finalUnitPriceUsd * body.quantity;
   const totalSyp = Number(product.priceSyp) * body.quantity;
@@ -341,7 +346,7 @@ router.post("/orders", async (req, res) => {
   const meta: any = {
     pricing: {
       providerUnitPriceUsd,
-      dashboardUnitPriceUsd,
+      dashboardMarkupUsd,
       finalUnitPriceUsd,
     },
   };
