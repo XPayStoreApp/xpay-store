@@ -192,6 +192,21 @@ export async function notifyUserDepositApproved(args: {
   await sendTelegramMessage("store", args.telegramId, msg);
 }
 
+export async function notifyUserDepositPending(args: {
+  telegramId: string;
+  operationNumber: string;
+  amount: number;
+  currency: "USD" | "SYP";
+}) {
+  const amountLabel = args.currency === "USD" ? `${args.amount.toFixed(3)}$` : `${args.amount.toFixed(0)}.SY`;
+  const msg =
+    `⏳ تم استلام طلب الإيداع وهو الآن قيد الانتظار.\n` +
+    `المبلغ: ${amountLabel}\n` +
+    `رقم العملية: ${args.operationNumber}\n\n` +
+    `سيصلك إشعار تلقائي بعد التحقق.`;
+  await sendTelegramMessage("store", args.telegramId, msg);
+}
+
 export async function notifyUserDepositRejected(args: {
   telegramId: string;
   operationNumber: string;

@@ -29,7 +29,7 @@ function readIdentityFromInitData(initDataRaw?: string): { telegramId: string; u
   }
 }
 
-function readTelegramIdentity(req?: Request): { telegramId: string; username: string } {
+function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { telegramId: string; username: string } {
   const hdr = req?.headers || {};
   const initDataRaw = hdr["x-telegram-init-data"] as string | undefined;
   const parsedFromInitData = readIdentityFromInitData(initDataRaw);
@@ -48,6 +48,12 @@ function readTelegramIdentity(req?: Request): { telegramId: string; username: st
 
   const telegramId = String(tgIdRaw || "").trim();
   if (!telegramId) {
+    if (opts?.strict) {
+      const err: any = new Error("telegram_identity_missing");
+      err.statusCode = 401;
+      err.publicMessage = "هوية تيليجرام غير متاحة. افتح المتجر من داخل Telegram Mini App.";
+      throw err;
+    }
     const allowFallback = process.env.ALLOW_DEFAULT_TELEGRAM_ID === "true";
     if (allowFallback) {
       return {
@@ -76,6 +82,38 @@ export function getShortAccountId(telegramId: string): string {
 
 export async function getOrCreateCurrentUser(req?: Request) {
   const identity = readTelegramIdentity(req);
+  const existing = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.telegramId, identity.telegramId))
+    .limit(1);
+  if (existing.length > 0) {
+    const current = existing[0]!;
+    if (!current.username || current.username === DEFAULT_USERNAME) {
+      const [updated] = await db
+        .update(usersTable)
+        .set({ username: identity.username })
+        .where(eq(usersTable.id, current.id))
+        .returning();
+      return updated ?? current;
+    }
+    return current;
+  }
+  const inserted = await db
+    .insert(usersTable)
+    .values({
+      telegramId: identity.telegramId,
+      username: identity.username,
+      balanceUsd: "0",
+      balanceSyp: "0",
+      role: "user",
+    })
+    .returning();
+  return inserted[0]!;
+}
+
+export async function getOrCreateCurrentUserStrict(req?: Request) {
+  const identity = readTelegramIdentity(req, { strict: true });
   const existing = await db
     .select()
     .from(usersTable)

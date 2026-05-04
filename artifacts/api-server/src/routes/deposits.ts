@@ -7,10 +7,11 @@ import {
   GetDepositsSummaryResponse,
   ListMyDepositsResponse,
 } from "@workspace/api-zod";
-import { getOrCreateCurrentUser } from "../lib/currentUser.js";
+import { getOrCreateCurrentUser, getOrCreateCurrentUserStrict } from "../lib/currentUser.js";
 import {
   notifyAdminsAboutDeposit,
   notifyUserDepositApproved,
+  notifyUserDepositPending,
   notifyUserDepositRejected,
 } from "../lib/telegram.js";
 
@@ -172,7 +173,7 @@ function rowToDeposit(d: typeof depositsTable.$inferSelect) {
 }
 
 router.get("/deposits", async (req, res) => {
-  const user = await getOrCreateCurrentUser(req);
+  const user = await getOrCreateCurrentUserStrict(req);
   await syncPendingShamCashDepositsForUser(user.id);
   const status = (req.query.status as string | undefined) ?? "all";
   const method = (req.query.method as string | undefined) ?? "all";
@@ -188,7 +189,7 @@ router.get("/deposits", async (req, res) => {
 });
 
 router.get("/deposits/summary", async (_req, res) => {
-  const user = await getOrCreateCurrentUser(_req);
+  const user = await getOrCreateCurrentUserStrict(_req);
   await syncPendingShamCashDepositsForUser(user.id);
   const all = await db
     .select({
@@ -212,7 +213,7 @@ router.get("/deposits/summary", async (_req, res) => {
 
 router.post("/deposits/shamcash/:invoiceId/sync", async (req, res) => {
   try {
-    const user = await getOrCreateCurrentUser(req);
+    const user = await getOrCreateCurrentUserStrict(req);
     const invoiceId = String(req.params.invoiceId || "").trim();
     if (!invoiceId) {
       res.status(400).json({ error: "invoiceId is required" });
@@ -248,7 +249,7 @@ router.post("/deposits", async (req, res) => {
     typeof (req.body as any)?.proofImage === "string" && (req.body as any).proofImage.trim().length > 0
       ? String((req.body as any).proofImage)
       : null;
-  const user = await getOrCreateCurrentUser(req);
+  const user = await getOrCreateCurrentUserStrict(req);
   const m = (await db.select().from(paymentMethodsTable).where(eq(paymentMethodsTable.code, body.method)).limit(1))[0];
   const methodLabel = m?.name ?? body.method;
   const amountUsd =
@@ -277,6 +278,12 @@ router.post("/deposits", async (req, res) => {
       username: user.username,
       transactionId,
       proofImage,
+    });
+    await notifyUserDepositPending({
+      telegramId: user.telegramId,
+      operationNumber: String(dep.id),
+      amount: body.amount,
+      currency: body.currency,
     });
   } catch (error) {
     console.error("Notify admins about deposit failed:", error);
@@ -315,7 +322,7 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
       },
     };
 
-    const user = await getOrCreateCurrentUser(reqWithFallbackHeaders);
+    const user = await getOrCreateCurrentUserStrict(reqWithFallbackHeaders);
     const currency = String(req.body?.currency || "SYP").toUpperCase();
     const amount = Number(req.body?.amount);
     if (!["USD", "SYP", "EUR"].includes(currency) || !Number.isFinite(amount) || amount <= 0) {
@@ -379,6 +386,17 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
       .set({ transactionId: String(invoiceJson.invoiceId) })
       .where(eq(depositsTable.id, dep.id));
 
+    try {
+      await notifyUserDepositPending({
+        telegramId: user.telegramId,
+        operationNumber: String(invoiceJson.invoiceId),
+        amount,
+        currency: currency as "USD" | "SYP",
+      });
+    } catch (error) {
+      console.error("Notify auto-deposit pending failed:", error);
+    }
+
     res.json({
       ok: true,
       depositId: dep.id,
@@ -411,7 +429,7 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
       return;
     }
 
-    const user = await getOrCreateCurrentUser(req);
+    const user = await getOrCreateCurrentUserStrict(req);
     const invoiceId = String(req.body?.invoiceId || "").trim();
     const transactionRef = String(req.body?.transactionRef || "").trim();
     if (!invoiceId || !transactionRef) {
