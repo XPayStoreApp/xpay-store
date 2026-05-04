@@ -15,7 +15,10 @@ import {
 } from "../lib/telegram.js";
 
 const router: IRouter = Router();
-const SAM_API_BASE_URL = process.env.SAM_API_BASE_URL || "https://www.sam-api.pro/api";
+const SAM_API_BASE_URL = process.env.SAM_API_BASE_URL || "https://sam-api.pro/api";
+const SAM_PAY_BASE_URL =
+  process.env.SAM_PAY_BASE_URL ||
+  SAM_API_BASE_URL.replace(/\/api\/?$/i, "");
 const SAM_API_KEY = process.env.SAM_API_KEY || "";
 const SAM_SHAMCASH_IDENTIFIER = process.env.SAM_SHAMCASH_IDENTIFIER || "";
 const SAM_WEBHOOK_SECRET = process.env.SAM_WEBHOOK_SECRET || "";
@@ -25,6 +28,7 @@ function authHeaders() {
   if (!SAM_API_KEY) throw new Error("SAM_API_KEY is missing");
   return {
     Authorization: `Bearer ${SAM_API_KEY}`,
+    "X-Api-Key": SAM_API_KEY,
     "Content-Type": "application/json",
   };
 }
@@ -95,7 +99,7 @@ async function syncShamCashInvoiceStatus(invoiceId: string): Promise<{
   if (!dep) return { found: false };
   if (dep.status !== "pending") return { found: true, status: dep.status, synced: dep.status as any };
 
-  const payResp = await fetch(`${SAM_API_BASE_URL.replace(/\/+$/, "")}/pay/${encodeURIComponent(cleanInvoiceId)}`);
+  const payResp = await fetch(`${SAM_PAY_BASE_URL.replace(/\/+$/, "")}/pay/${encodeURIComponent(cleanInvoiceId)}`);
   const payJson: any = await payResp.json().catch(() => ({}));
   const samStatus = String(payJson?.status || "").toLowerCase();
 
@@ -400,7 +404,7 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
       return;
     }
 
-    const verifyResp = await fetch(`${SAM_API_BASE_URL.replace(/\/+$/, "")}/pay/${encodeURIComponent(invoiceId)}/verify`, {
+    const verifyResp = await fetch(`${SAM_PAY_BASE_URL.replace(/\/+$/, "")}/pay/${encodeURIComponent(invoiceId)}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ transactionRef }),
