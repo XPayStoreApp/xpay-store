@@ -121,6 +121,9 @@ async function getOrCreateExternalCategoryId(): Promise<number> {
 async function applyDepositStatusChange(id: number, status: string) {
   const [dep] = await db.select().from(depositsTable).where(eq(depositsTable.id, id)).limit(1);
   if (!dep) return { error: "not_found" as const };
+  if (dep.method === "sham_cash_auto") {
+    return { error: "auto_managed" as const };
+  }
 
   if (status === "approved" && dep.status !== "approved") {
     const col = dep.currency === "SYP" ? "balanceSyp" : "balanceUsd";
@@ -850,6 +853,10 @@ router.post("/admin/deposits/:id/status", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const result = await applyDepositStatusChange(id, status);
   if ("error" in result) {
+    if (result.error === "auto_managed") {
+      res.status(400).json({ error: "إيداع شام كاش التلقائي يُدار تلقائيًا عبر API ولا يقبل موافقة/رفض يدوي." });
+      return;
+    }
     res.status(404).json({ error: "غير موجود" });
     return;
   }
@@ -1165,6 +1172,10 @@ router.patch("/admin/deposits/:id/status", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const result = await applyDepositStatusChange(id, status);
   if ("error" in result) {
+    if (result.error === "auto_managed") {
+      res.status(400).json({ error: "إيداع شام كاش التلقائي يُدار تلقائيًا عبر API ولا يقبل موافقة/رفض يدوي." });
+      return;
+    }
     res.status(404).json({ error: "غير موجود" });
     return;
   }

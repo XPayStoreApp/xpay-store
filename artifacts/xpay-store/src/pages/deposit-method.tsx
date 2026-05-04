@@ -79,6 +79,8 @@ export default function DepositMethod() {
 
   const method = (methods as UiMethod[] | undefined)?.find((m) => m.code === methodCode);
   const apiBaseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+  const isShamCashAuto = method?.code === "sham_cash_auto";
+  const isShamCashManual = method?.code === "sham_cash";
 
   const readTelegramIdentity = (): TelegramIdentity | null => {
     try {
@@ -236,7 +238,7 @@ export default function DepositMethod() {
           currency: values.currency,
           amount: values.amount,
           transactionId,
-          proofImage: values.proofImage || undefined,
+          proofImage: isShamCashAuto ? undefined : (values.proofImage || undefined),
         } as any,
       },
       {
@@ -450,35 +452,39 @@ export default function DepositMethod() {
                 />
               ) : null}
 
-              <FormField
-                control={form.control}
-                name="proofImage"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>صورة الإيصال (اختياري)</FormLabel>
-                    <FormControl>
-                      <div className="space-y-2">
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => onProofFileChange(e.target.files?.[0])}
-                          className="h-12 bg-background border-white/5 rounded-xl text-base"
-                        />
-                        <Input
-                          placeholder="أو رابط صورة الإيصال"
-                          value={field.value || ""}
-                          onChange={(e) => field.onChange(e.target.value)}
-                          className="h-12 bg-background border-white/5 rounded-xl text-base"
-                        />
-                        {proofImageName ? (
-                          <div className="text-xs text-muted-foreground">الملف المحدد: {proofImageName}</div>
-                        ) : null}
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {!isShamCashAuto ? (
+                <FormField
+                  control={form.control}
+                  name="proofImage"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>صورة الإيصال (اختياري)</FormLabel>
+                      <FormControl>
+                        <div className="space-y-2">
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => onProofFileChange(e.target.files?.[0])}
+                            className="h-12 bg-background border-white/5 rounded-xl text-base"
+                          />
+                          {!isShamCashManual ? (
+                            <Input
+                              placeholder="أو رابط صورة الإيصال"
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(e.target.value)}
+                              className="h-12 bg-background border-white/5 rounded-xl text-base"
+                            />
+                          ) : null}
+                          {proofImageName ? (
+                            <div className="text-xs text-muted-foreground">الملف المحدد: {proofImageName}</div>
+                          ) : null}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : null}
 
               <div className="pt-4">
                 <Button

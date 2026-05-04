@@ -13,31 +13,41 @@ export default function Deposits() {
     const qs = params.toString();
     get(`/deposits${qs ? "?" + qs : ""}`).then(setItems).catch(() => {});
   };
-  useEffect(() => { load(); }, [status]);
+
+  useEffect(() => {
+    load();
+  }, [status]);
 
   const update = async (id: number, newStatus: string) => {
     setBusy(id);
     try {
       await patch(`/deposits/${id}/status`, { status: newStatus });
       load();
-    } finally { setBusy(null); }
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">Ø§Ù„Ø¥ÙŠØ¯Ø§Ø¹Ø§Øª</h1>
+      <h1 className="text-2xl font-bold text-slate-900">ÇáÅíÏÇÚÇÊ</h1>
 
       <div className="flex flex-wrap gap-2">
         {[
-          { k: "all", l: "Ø§Ù„ÙƒÙ„" },
-          { k: "pending", l: "Ø¨Ø§Ù†ØªØ¸Ø§Ø±" },
-          { k: "approved", l: "Ù…Ù‚Ø¨ÙˆÙ„" },
-          { k: "rejected", l: "Ù…Ø±ÙÙˆØ¶" },
+          { k: "all", l: "Çáßá" },
+          { k: "pending", l: "ÈÇäÊÙÇÑ" },
+          { k: "approved", l: "ãŞÈæá" },
+          { k: "rejected", l: "ãÑİæÖ" },
         ].map((t) => (
-          <button key={t.k} onClick={() => setStatus(t.k)}
+          <button
+            key={t.k}
+            onClick={() => setStatus(t.k)}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
-              status === t.k ? "bg-brand-600 text-white" : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
-            }`}>
+              status === t.k
+                ? "bg-brand-600 text-white"
+                : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
             {t.l}
           </button>
         ))}
@@ -49,45 +59,71 @@ export default function Deposits() {
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="text-right px-4 py-3 font-semibold">#</th>
-                <th className="text-right px-4 py-3 font-semibold">Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…</th>
-                <th className="text-right px-4 py-3 font-semibold">Ø§Ù„Ø·Ø±ÙŠÙ‚Ø©</th>
-                <th className="text-right px-4 py-3 font-semibold">Ø§Ù„Ù…Ø¨Ù„Øº</th>
-                <th className="text-right px-4 py-3 font-semibold">Ø±Ù‚Ù… Ø§Ù„Ø¹Ù…Ù„ÙŠØ©</th>
-                <th className="text-right px-4 py-3 font-semibold">Ø§Ù„Ø­Ø§Ù„Ø©</th>
-                <th className="text-right px-4 py-3 font-semibold">Ø§Ù„ØªØ§Ø±ÙŠØ®</th>
-                <th className="text-right px-4 py-3 font-semibold w-32">Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª</th>
+                <th className="text-right px-4 py-3 font-semibold">ÇáãÓÊÎÏã</th>
+                <th className="text-right px-4 py-3 font-semibold">ÇáØÑíŞÉ</th>
+                <th className="text-right px-4 py-3 font-semibold">ÇáãÈáÛ</th>
+                <th className="text-right px-4 py-3 font-semibold">ÑŞã ÇáÚãáíÉ</th>
+                <th className="text-right px-4 py-3 font-semibold">ÇáÍÇáÉ</th>
+                <th className="text-right px-4 py-3 font-semibold">ÇáÊÇÑíÎ</th>
+                <th className="text-right px-4 py-3 font-semibold w-32">ÅÌÑÇÁÇÊ</th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-8 text-slate-400">Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¥ÙŠØ¯Ø§Ø¹Ø§Øª</td></tr>
-              ) : items.map((d) => (
-                <tr key={d.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3 text-slate-500">{d.id}</td>
-                  <td className="px-4 py-3">{d.userName || `#${d.userId}`}</td>
-                  <td className="px-4 py-3">{d.methodLabel}</td>
-                  <td className="px-4 py-3 font-bold">
-                    {d.currency === "USD" ? `$${Number(d.amountUsd).toFixed(2)}` : `${Number(d.amountSyp).toFixed(0)} Ù„.Ø³`}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">{d.transactionId}</td>
-                  <td className="px-4 py-3"><StatusPill s={d.status}/></td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{new Date(d.createdAt).toLocaleString("ar")}</td>
-                  <td className="px-4 py-3">
-                    {d.status === "pending" && (
-                      <div className="flex items-center gap-1">
-                        <button disabled={busy === d.id} onClick={() => update(d.id, "approved")}
-                          className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded disabled:opacity-50" title="Ù‚Ø¨ÙˆÙ„">
-                          <Check size={15}/>
-                        </button>
-                        <button disabled={busy === d.id} onClick={() => update(d.id, "rejected")}
-                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded disabled:opacity-50" title="Ø±ÙØ¶">
-                          <XIcon size={15}/>
-                        </button>
-                      </div>
-                    )}
+                <tr>
+                  <td colSpan={8} className="text-center py-8 text-slate-400">
+                    áÇ ÊæÌÏ ÅíÏÇÚÇÊ
                   </td>
                 </tr>
-              ))}
+              ) : (
+                items.map((d) => {
+                  const isAutoSham = d.method === "sham_cash_auto";
+                  return (
+                    <tr key={d.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="px-4 py-3 text-slate-500">{d.id}</td>
+                      <td className="px-4 py-3">{d.userName || `#${d.userId}`}</td>
+                      <td className="px-4 py-3">{d.methodLabel}</td>
+                      <td className="px-4 py-3 font-bold">
+                        {d.currency === "USD"
+                          ? `$${Number(d.amountUsd).toFixed(2)}`
+                          : `${Number(d.amountSyp).toFixed(0)} á.Ó`}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs">{d.transactionId}</td>
+                      <td className="px-4 py-3">
+                        <StatusPill s={d.status} />
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {new Date(d.createdAt).toLocaleString("ar")}
+                      </td>
+                      <td className="px-4 py-3">
+                        {d.status === "pending" && !isAutoSham ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              disabled={busy === d.id}
+                              onClick={() => update(d.id, "approved")}
+                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded disabled:opacity-50"
+                              title="ŞÈæá"
+                            >
+                              <Check size={15} />
+                            </button>
+                            <button
+                              disabled={busy === d.id}
+                              onClick={() => update(d.id, "rejected")}
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded disabled:opacity-50"
+                              title="ÑİÖ"
+                            >
+                              <XIcon size={15} />
+                            </button>
+                          </div>
+                        ) : null}
+                        {d.status === "pending" && isAutoSham ? (
+                          <span className="text-[11px] text-slate-500">ÊáŞÇÆí ÚÈÑ API</span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -102,6 +138,15 @@ function StatusPill({ s }: { s: string }) {
     approved: "bg-emerald-100 text-emerald-700",
     rejected: "bg-rose-100 text-rose-700",
   };
-  const labels: Record<string, string> = { pending: "Ø¨Ø§Ù†ØªØ¸Ø§Ø±", approved: "Ù…Ù‚Ø¨ÙˆÙ„", rejected: "Ù…Ø±ÙÙˆØ¶" };
-  return <span className={`text-xs font-semibold px-2 py-0.5 rounded ${map[s] || "bg-slate-100"}`}>{labels[s] || s}</span>;
+  const labels: Record<string, string> = {
+    pending: "ÈÇäÊÙÇÑ",
+    approved: "ãŞÈæá",
+    rejected: "ãÑİæÖ",
+  };
+
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${map[s] || "bg-slate-100"}`}>
+      {labels[s] || s}
+    </span>
+  );
 }
