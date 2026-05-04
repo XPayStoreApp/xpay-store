@@ -297,7 +297,12 @@ export default function DepositMethod() {
         return;
       }
 
-      toast.error(payload?.message || "تعذر التحقق من رقم العملية");
+      const msg = String(payload?.message || "");
+      if (msg === "verification_failed") {
+        toast.error("تعذر التحقق من رقم العملية. تأكد من كتابة الرقم كما ظهر في شام كاش.");
+      } else {
+        toast.error(msg || "تعذر التحقق من رقم العملية");
+      }
     } catch (error: any) {
       toast.error(error?.message || "فشل التحقق من العملية");
     } finally {
