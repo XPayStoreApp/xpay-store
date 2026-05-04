@@ -75,9 +75,20 @@ export default function Products() {
         },
         { name: "name", label: "اسم المنتج", type: "text", required: true },
         { name: "image", label: "رابط الصورة", type: "text", required: true },
-        { name: "priceUsd", label: "السعر (USD)", type: "number", step: "0.0001", required: true },
+        {
+          name: "priceUsd",
+          label: "السعر (USD)",
+          type: "text",
+          placeholder: "مثال: 0.000000000021",
+          required: true,
+        },
         { name: "priceSyp", label: "السعر (SYP)", type: "number", step: "0.01", required: true },
-        { name: "basePriceUsd", label: "سعر التكلفة (USD)", type: "number", step: "0.0001" },
+        {
+          name: "basePriceUsd",
+          label: "سعر التكلفة (USD)",
+          type: "text",
+          placeholder: "اختياري - يدعم أرقام دقيقة جدا",
+        },
         {
           name: "productType",
           label: "نوع المنتج",

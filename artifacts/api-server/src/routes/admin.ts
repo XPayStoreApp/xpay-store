@@ -61,6 +61,28 @@ function normalizeNumberField(data: Record<string, any>, key: string, opts?: { n
   data[key] = n;
 }
 
+function normalizeDecimalField(
+  data: Record<string, any>,
+  key: string,
+  opts?: { nullable?: boolean; required?: boolean },
+) {
+  const raw = data[key];
+  const nullable = opts?.nullable ?? false;
+  const required = opts?.required ?? false;
+
+  if (isBlank(raw)) {
+    if (required) throw new ValidationError(`${key} is required`);
+    data[key] = nullable ? null : raw;
+    return;
+  }
+
+  const s = String(raw).trim();
+  if (!/^-?\d+(\.\d+)?$/.test(s)) {
+    throw new ValidationError(`${key} must be a valid decimal number`);
+  }
+  data[key] = s;
+}
+
 function findPgError(err: any): any {
   let cur = err;
   for (let i = 0; i < 6 && cur; i += 1) {
@@ -480,7 +502,7 @@ async function hasColumn(tableName: string, columnName: string): Promise<boolean
   return exists;
 }
 
-async function fetchProviderLiveCostUsd(providerId: number, providerProductId: number): Promise<number> {
+async function fetchProviderLiveCostUsd(providerId: number, providerProductId: number): Promise<string> {
   const [provider] = await db
     .select()
     .from(providersTable)
@@ -502,8 +524,8 @@ async function fetchProviderLiveCostUsd(providerId: number, providerProductId: n
     throw new ValidationError(`providerProductId ${providerProductId} was not found at provider ${providerId}`);
   }
 
-  const remotePrice = Number(remote.price);
-  if (!Number.isFinite(remotePrice)) {
+  const remotePrice = String(remote.price ?? "").trim();
+  if (!/^-?\d+(\.\d+)?$/.test(remotePrice)) {
     throw new ValidationError(`provider product price is invalid for providerProductId ${providerProductId}`);
   }
 
@@ -534,9 +556,9 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
       source !== "manual" || !isBlank(normalized.providerId) || !isBlank(normalized.providerProductId);
 
     if ("categoryId" in normalized) normalizeNumberField(normalized, "categoryId", { required: true });
-    if ("priceUsd" in normalized) normalizeNumberField(normalized, "priceUsd", { required: true });
+    if ("priceUsd" in normalized) normalizeDecimalField(normalized, "priceUsd", { required: true });
     if ("priceSyp" in normalized) normalizeNumberField(normalized, "priceSyp", { required: true });
-    if ("basePriceUsd" in normalized) normalizeNumberField(normalized, "basePriceUsd", { nullable: true });
+    if ("basePriceUsd" in normalized) normalizeDecimalField(normalized, "basePriceUsd", { nullable: true });
     if ("minQty" in normalized) normalizeNumberField(normalized, "minQty", { nullable: true });
     if ("maxQty" in normalized) normalizeNumberField(normalized, "maxQty", { nullable: true });
     if ("providerId" in normalized) normalizeNumberField(normalized, "providerId", { nullable: true });
