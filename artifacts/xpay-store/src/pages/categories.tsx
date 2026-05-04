@@ -41,7 +41,7 @@ export default function Categories() {
       {/* Content */}
       <div className="flex-1 p-4">
         {isLoading ? (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-4 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex flex-col gap-2">
                 <Skeleton className="w-full aspect-[4/3] rounded-xl" />
@@ -51,7 +51,7 @@ export default function Categories() {
             ))}
           </div>
         ) : products && products.length > 0 ? (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-4 gap-3">
             {products.map((product, i) => (
               <Link key={product.id} href={`/products/${product.id}`}>
                 <motion.div 
