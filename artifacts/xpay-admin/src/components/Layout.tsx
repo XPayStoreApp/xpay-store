@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { post } from "../lib/api";
 import {
@@ -14,35 +14,43 @@ const NAV: { to: string; label: string; icon: any; group: string }[] = [
   { to: "/orders", label: "الطلبات", icon: ShoppingCart, group: "العمليات" },
   { to: "/deposits", label: "الإيداعات", icon: Wallet, group: "العمليات" },
   { to: "/users", label: "المستخدمون", icon: Users, group: "العمليات" },
+
   { to: "/categories", label: "الأقسام", icon: FolderTree, group: "المتجر" },
   { to: "/products", label: "المنتجات", icon: Package, group: "المتجر" },
   { to: "/payment-methods", label: "طرق الدفع", icon: CreditCard, group: "المتجر" },
   { to: "/banners", label: "البانرات", icon: ImageIcon, group: "المتجر" },
   { to: "/news", label: "الأخبار", icon: Megaphone, group: "المتجر" },
   { to: "/social-links", label: "الروابط الاجتماعية", icon: Share2, group: "المتجر" },
+
   { to: "/providers", label: "المزودون", icon: Server, group: "التكامل" },
-  { to: "/coupons", label: "كوبونات الخصم", icon: Ticket, group: "التسويق" },
-  { to: "/vip", label: "عضويات VIP", icon: Crown, group: "التسويق" },
   { to: "/auto-codes", label: "الأكواد التلقائية", icon: KeyRound, group: "التكامل" },
   { to: "/order-messages", label: "رسائل الطلبات", icon: MessageSquare, group: "التكامل" },
   { to: "/api-keys", label: "مفاتيح API", icon: Code2, group: "التكامل" },
+
+  { to: "/coupons", label: "كوبونات الخصم", icon: Ticket, group: "التسويق" },
+  { to: "/vip", label: "عضويات VIP", icon: Crown, group: "التسويق" },
   { to: "/notifications", label: "الإشعارات", icon: Bell, group: "التسويق" },
+
   { to: "/admins", label: "المشرفون", icon: ShieldCheck, group: "النظام" },
   { to: "/permissions", label: "الصلاحيات", icon: Lock, group: "النظام" },
   { to: "/activity", label: "سجل النشاط", icon: Activity, group: "النظام" },
   { to: "/reports", label: "التقارير", icon: BarChart3, group: "النظام" },
+  { to: "/backup", label: "النسخ الاحتياطي", icon: Database, group: "النظام" },
+
   { to: "/settings", label: "الإعدادات العامة", icon: SettingsIcon, group: "الإعدادات" },
   { to: "/theme", label: "تخصيص التصميم", icon: Palette, group: "الإعدادات" },
   { to: "/currencies", label: "العملات", icon: Globe, group: "الإعدادات" },
   { to: "/languages", label: "اللغات", icon: LangIcon, group: "الإعدادات" },
   { to: "/maintenance", label: "وضع الصيانة", icon: PowerOff, group: "الإعدادات" },
-  { to: "/backup", label: "النسخ الاحتياطي", icon: Database, group: "النظام" },
+
   { to: "/profile", label: "الملف الشخصي", icon: UserIcon, group: "حسابي" },
   { to: "/2fa", label: "التحقق الثنائي", icon: ShieldCheck, group: "حسابي" },
 ];
 
 export default function Layout({
-  children, me, onLogout,
+  children,
+  me,
+  onLogout,
 }: {
   children: React.ReactNode;
   me: any;
@@ -52,7 +60,9 @@ export default function Layout({
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    try { await post("/logout"); } catch {}
+    try {
+      await post("/logout");
+    } catch {}
     onLogout();
     navigate("/");
   };
@@ -64,7 +74,6 @@ export default function Layout({
 
   return (
     <div className="flex min-h-screen bg-slate-100" dir="rtl">
-      {/* Sidebar */}
       <aside
         className={`fixed lg:static z-40 inset-y-0 right-0 w-72 bg-white border-l border-slate-200 transform transition-transform overflow-y-auto ${
           open ? "translate-x-0" : "translate-x-full lg:translate-x-0"
@@ -79,6 +88,7 @@ export default function Layout({
             <X size={20} />
           </button>
         </div>
+
         <nav className="p-3 space-y-4">
           {Object.entries(groups).map(([group, items]) => (
             <div key={group}>
@@ -92,9 +102,7 @@ export default function Layout({
                     onClick={() => setOpen(false)}
                     className={({ isActive }) =>
                       `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                        isActive
-                          ? "bg-brand-600 text-white"
-                          : "text-slate-700 hover:bg-slate-100"
+                        isActive ? "bg-brand-600 text-white" : "text-slate-700 hover:bg-slate-100"
                       }`
                     }
                   >
@@ -108,23 +116,14 @@ export default function Layout({
         </nav>
       </aside>
 
-      {/* Backdrop */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/40 z-30 lg:hidden"
-          onClick={() => setOpen(false)}
-        />
-      )}
+      {open && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={() => setOpen(false)} />}
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-white border-b border-slate-200 px-4 lg:px-6 py-3 flex items-center justify-between">
           <button className="lg:hidden text-slate-700" onClick={() => setOpen(true)}>
             <Menu size={22} />
           </button>
-          <div className="hidden lg:block text-sm text-slate-500">
-            مرحباً بك في لوحة إدارة XPayStore
-          </div>
+          <div className="hidden lg:block text-sm text-slate-500">مرحبًا بك في لوحة إدارة XPayStore</div>
           <div className="flex items-center gap-3">
             <div className="text-sm text-left hidden sm:block">
               <div className="font-semibold text-slate-900">{me?.fullName || me?.username}</div>
