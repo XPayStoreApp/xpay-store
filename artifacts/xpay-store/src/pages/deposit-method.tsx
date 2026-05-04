@@ -32,7 +32,7 @@ import {
 
 const depositSchema = z.object({
   currency: z.enum(["USD", "SYP"]),
-  amount: z.coerce.number().positive("ط§ظ„ظ…ط¨ظ„ط؛ ظٹط¬ط¨ ط£ظ† ظٹظƒظˆظ† ط£ظƒط¨ط± ظ…ظ† طµظپط±"),
+  amount: z.coerce.number().positive("المبلغ يجب أن يكون أكبر من صفر"),
   transactionId: z.string().optional(),
   proofImage: z.string().optional(),
 });
@@ -57,17 +57,16 @@ type TelegramIdentity = {
 type AutoInvoiceState = {
   depositId: number;
   invoiceId: string;
-  paymentUrl: string;
   expiresAt?: string | null;
 };
 
 function getMethodName(method: UiMethod) {
-  if (method.code === "sham_cash_auto") return "ط´ط§ظ… ظƒط§ط´";
+  if (method.code === "sham_cash_auto") return "شام كاش";
   return method.name;
 }
 
 function getMethodSubtitle(method: UiMethod) {
-  if (method.code === "sham_cash_auto") return "ط´ط§ظ… ظƒط§ط´ طھظ„ظ‚ط§ط¦ظٹ ط¹ط¨ط± ط§ظ„ظپط§طھظˆط±ط©";
+  if (method.code === "sham_cash_auto") return "شام كاش التلقائي";
   return method.subtitle;
 }
 
@@ -98,6 +97,7 @@ export default function DepositMethod() {
       const tg = (window as any)?.Telegram?.WebApp;
       const user = tg?.initDataUnsafe?.user;
       const initData = String(tg?.initData || "").trim();
+
       if (user?.id != null) {
         const identity: TelegramIdentity = {
           id: String(user.id),
@@ -114,6 +114,7 @@ export default function DepositMethod() {
       const hashRaw = String(window.location.hash || "").replace(/^#/, "");
       const hash = new URLSearchParams(hashRaw);
       const webAppData = search.get("tgWebAppData") || hash.get("tgWebAppData");
+
       if (webAppData) {
         const init = new URLSearchParams(webAppData);
         const userRaw = init.get("user");
@@ -134,11 +135,9 @@ export default function DepositMethod() {
       }
 
       const cachedRaw = localStorage.getItem("tg_identity_cache");
-      if (cachedRaw) {
-        const cached = JSON.parse(cachedRaw);
-        if (cached?.id) return cached as TelegramIdentity;
-      }
-      return null;
+      if (!cachedRaw) return null;
+      const cached = JSON.parse(cachedRaw);
+      return cached?.id ? (cached as TelegramIdentity) : null;
     } catch {
       return null;
     }
@@ -147,8 +146,7 @@ export default function DepositMethod() {
   const form = useForm<z.infer<typeof depositSchema>>({
     resolver: zodResolver(depositSchema),
     defaultValues: {
-      currency:
-        methodCode?.includes("syriatel") || methodCode?.includes("mtn") ? "SYP" : "USD",
+      currency: methodCode?.includes("syriatel") || methodCode?.includes("mtn") ? "SYP" : "USD",
       amount: undefined as unknown as number,
       transactionId: "",
       proofImage: "",
@@ -174,22 +172,17 @@ export default function DepositMethod() {
   const onSubmit = (values: z.infer<typeof depositSchema>) => {
     if (!method) return;
 
-    if (
-      values.proofImage &&
-      values.proofImage.startsWith("data:") &&
-      values.proofImage.length > 1_500_000
-    ) {
-      toast.error("ط­ط¬ظ… طµظˆط±ط© ط§ظ„ط¥ظٹطµط§ظ„ ظƒط¨ظٹط±. ط§ط®طھط± طµظˆط±ط© ط£طµط؛ط± ط£ظˆ ط§ط³طھط®ط¯ظ… ط±ط§ط¨ط· طµظˆط±ط©.");
+    if (values.proofImage && values.proofImage.startsWith("data:") && values.proofImage.length > 1_500_000) {
+      toast.error("حجم صورة الإيصال كبير، اختر صورة أصغر.");
       return;
     }
 
     if (method.code === "sham_cash_auto") {
       setAutoLoading(true);
       const tg = readTelegramIdentity();
-      const invoiceUrl =
-        tg?.id
-          ? `${apiBaseUrl}/api/deposits/shamcash/invoice?tg_id=${encodeURIComponent(tg.id)}&tg_username=${encodeURIComponent(tg.username || "")}`
-          : `${apiBaseUrl}/api/deposits/shamcash/invoice`;
+      const invoiceUrl = tg?.id
+        ? `${apiBaseUrl}/api/deposits/shamcash/invoice?tg_id=${encodeURIComponent(tg.id)}&tg_username=${encodeURIComponent(tg.username || "")}`
+        : `${apiBaseUrl}/api/deposits/shamcash/invoice`;
 
       fetch(invoiceUrl, {
         method: "POST",
@@ -213,29 +206,21 @@ export default function DepositMethod() {
       })
         .then(async (r) => {
           const payload = await r.json().catch(() => null);
-          if (!r.ok || !payload?.paymentUrl) {
-            throw new Error(
-              payload?.message ||
-              payload?.error ||
-              `invoice_http_${r.status}`
-            );
+          if (!r.ok || !payload?.invoiceId) {
+            throw new Error(payload?.message || payload?.error || `invoice_http_${r.status}`);
           }
 
           const invoiceId = String(payload.invoiceId || "");
           setAutoInvoice({
             depositId: Number(payload.depositId),
             invoiceId,
-            paymentUrl: String(payload.paymentUrl || ""),
             expiresAt: payload.expiresAt || null,
           });
           setAutoTransactionRef("");
-          if (invoiceId) {
-            toast.success(`طھظ… ط¥ظ†ط´ط§ط، ط§ظ„ظپط§طھظˆط±ط© ط¨ظ†ط¬ط§ط­. ط±ظ‚ظ… ط§ظ„ط¹ظ…ظ„ظٹط©: ${invoiceId}`);
-          }
-
+          toast.success(`تم إنشاء الفاتورة بنجاح. رقم العملية: ${invoiceId}`);
           queryClient.invalidateQueries({ queryKey: ["/api/deposits"] });
         })
-                .catch((err: any) => {
+        .catch((err: any) => {
           toast.error(err?.message || "فشل إنشاء فاتورة شام كاش");
         })
         .finally(() => {
@@ -246,7 +231,7 @@ export default function DepositMethod() {
 
     const transactionId = String(values.transactionId || "").trim();
     if (!/^\d{3,}$/.test(transactionId)) {
-      toast.error("ط±ظ‚ظ… ط§ظ„ط¹ظ…ظ„ظٹط© ظٹط¬ط¨ ط£ظ† ظٹط­طھظˆظٹ ط¹ظ„ظ‰ ط£ط±ظ‚ط§ظ… ظپظ‚ط· ظˆط¨ط­ط¯ ط£ط¯ظ†ظ‰ 3 ط®ط§ظ†ط§طھ");
+      toast.error("رقم العملية يجب أن يحتوي أرقام فقط وبحد أدنى 3 خانات");
       return;
     }
 
@@ -262,14 +247,14 @@ export default function DepositMethod() {
       },
       {
         onSuccess: () => {
-          toast.success("طھظ… ط¥ط±ط³ط§ظ„ ط·ظ„ط¨ ط§ظ„ط¥ظٹط¯ط§ط¹ ط¨ظ†ط¬ط§ط­");
+          toast.success("تم إرسال طلب الإيداع بنجاح");
           queryClient.invalidateQueries({ queryKey: ["/api/me"] });
           queryClient.invalidateQueries({ queryKey: ["/api/deposits"] });
           setLocation("/deposits");
         },
         onError: (err: any) => {
           const apiError = err?.response?.data?.error || err?.response?.data?.message || err?.message;
-          toast.error(apiError || "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ط§ظ„ط¥ط±ط³ط§ظ„");
+          toast.error(apiError || "حدث خطأ أثناء الإرسال");
         },
       },
     );
@@ -280,6 +265,7 @@ export default function DepositMethod() {
       toast.error("أنشئ الفاتورة أولاً");
       return;
     }
+
     const transactionRef = autoTransactionRef.trim();
     if (!/^\d+$/.test(transactionRef)) {
       toast.error("رقم العملية يجب أن يحتوي على أرقام فقط");
@@ -307,9 +293,10 @@ export default function DepositMethod() {
       }
 
       if (payload?.code === "EXPIRED") {
-        toast.error("انتهت صلاحية الفاتورة. أنشئ/حدّث فاتورة جديدة.");
+        toast.error("انتهت صلاحية الفاتورة. اضغط إنشاء/تحديث الفاتورة.");
         return;
       }
+
       toast.error(payload?.message || "تعذر التحقق من رقم العملية");
     } catch (error: any) {
       toast.error(error?.message || "فشل التحقق من العملية");
@@ -320,7 +307,7 @@ export default function DepositMethod() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success("طھظ… ط§ظ„ظ†ط³ط® ط¨ظ†ط¬ط§ط­");
+    toast.success("تم النسخ بنجاح");
   };
 
   if (isLoading) {
@@ -334,53 +321,8 @@ export default function DepositMethod() {
   }
 
   if (!method) {
-    return <div className="p-4 text-center mt-20 text-muted-foreground">ط·ط±ظٹظ‚ط© ط§ظ„ط¯ظپط¹ ط؛ظٹط± ظ…ظˆط¬ظˆط¯ط©</div>;
+    return <div className="p-4 text-center mt-20 text-muted-foreground">طريقة الدفع غير موجودة</div>;
   }
-
-  const isSyriatel = methodCode === "syriatel_cash";
-  const isMtn = methodCode === "mtn_cash";
-  const isBinance = methodCode === "binance_pay";
-  const isUsdt = methodCode === "usdt_auto";
-
-  const themeColor = isSyriatel
-    ? "text-[#E31837]"
-    : isMtn
-      ? "text-[#FFCC00]"
-      : isBinance
-        ? "text-[#FCD535]"
-        : isUsdt
-          ? "text-[#26A17B]"
-          : "text-primary";
-
-  const themeBg = isSyriatel
-    ? "bg-[#E31837]"
-    : isMtn
-      ? "bg-[#FFCC00]"
-      : isBinance
-        ? "bg-[#FCD535]"
-        : isUsdt
-          ? "bg-[#26A17B]"
-          : "bg-primary";
-
-  const themeBgLight = isSyriatel
-    ? "bg-[#E31837]/10"
-    : isMtn
-      ? "bg-[#FFCC00]/10"
-      : isBinance
-        ? "bg-[#FCD535]/10"
-        : isUsdt
-          ? "bg-[#26A17B]/10"
-          : "bg-primary/10";
-
-  const themeBorder = isSyriatel
-    ? "border-[#E31837]/20"
-    : isMtn
-      ? "border-[#FFCC00]/20"
-      : isBinance
-        ? "border-[#FCD535]/20"
-        : isUsdt
-          ? "border-[#26A17B]/20"
-          : "border-primary/20";
 
   return (
     <div className="min-h-screen bg-background pb-24 animate-in slide-in-from-right-4 duration-300">
@@ -394,37 +336,36 @@ export default function DepositMethod() {
       </div>
 
       <div className="p-4 space-y-6 mt-2">
-        <div className={`p-6 rounded-3xl border shadow-lg relative overflow-hidden ${themeBgLight} ${themeBorder}`}>
-          <div className="relative z-10">
-            <h2 className={`font-black text-xl mb-4 ${themeColor}`}>{getMethodSubtitle(method)}</h2>
-
-            {method.instructions && (
-              <p className="text-sm text-foreground/80 mb-6 leading-relaxed whitespace-pre-wrap">
-                {method.instructions}
-              </p>
-            )}
-
-            {method.walletAddress && (
-              <div className="bg-background/80 backdrop-blur-sm p-4 rounded-2xl border border-white/5">
-                <div className="text-xs text-muted-foreground mb-2">ط¹ظ†ظˆط§ظ† ط§ظ„ظ…ط­ظپط¸ط© / ط§ظ„ط±ظ‚ظ…:</div>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-mono text-sm font-bold truncate select-all">{method.walletAddress}</div>
-                  <button
-                    onClick={() => copyToClipboard(method.walletAddress!)}
-                    className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${themeBgLight} ${themeColor}`}
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {method.qrImage && (
-              <div className="mt-4 flex justify-center">
-                <img src={method.qrImage} alt="QR Code" className="w-32 h-32 rounded-xl border border-white/10" />
-              </div>
-            )}
+        <div className="p-6 rounded-3xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/10 via-blue-500/10 to-indigo-500/10 shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-black text-xl text-cyan-300">{getMethodSubtitle(method)}</h2>
+            <div className="text-xs px-2 py-1 rounded-full bg-cyan-500/20 text-cyan-200">XPay</div>
           </div>
+
+          {method.instructions && (
+            <p className="text-sm text-foreground/90 mb-6 leading-relaxed whitespace-pre-wrap">{method.instructions}</p>
+          )}
+
+          {method.walletAddress && (
+            <div className="bg-background/70 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
+              <div className="text-xs text-muted-foreground mb-2">عنوان المحفظة / الرقم</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-mono text-sm font-bold truncate select-all">{method.walletAddress}</div>
+                <button
+                  onClick={() => copyToClipboard(method.walletAddress!)}
+                  className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-cyan-500/20 text-cyan-300"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {method.qrImage && (
+            <div className="mt-4 flex justify-center">
+              <img src={method.qrImage} alt="QR Code" className="w-32 h-32 rounded-xl border border-white/10" />
+            </div>
+          )}
         </div>
 
         <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-4 flex gap-3 text-destructive">
@@ -432,20 +373,20 @@ export default function DepositMethod() {
           <div className="text-xs leading-relaxed space-y-1 font-medium">
             {method.code === "sham_cash_auto" ? (
               <>
-                <p>ط¨ط¹ط¯ ط§ظ„ط¶ط؛ط· ط¹ظ„ظ‰ طھط£ظƒظٹط¯ ط§ظ„ط¯ظپط¹ ط³ظٹطھظ… ط¥ظ†ط´ط§ط، ظپط§طھظˆط±ط© ط´ط§ظ… ظƒط§ط´ ظ…ط¨ط§ط´ط±ط©.</p>
-                <p>ط³ظٹط¸ظ‡ط± ط±ظ‚ظ… ط§ظ„ط¹ظ…ظ„ظٹط© (Invoice ID) ط«ظ… ظٹطھظ… طھط­ظˆظٹظ„ظƒ ظ„طµظپط­ط© ط§ظ„ط¯ظپط¹ طھظ„ظ‚ط§ط¦ظٹظ‹ط§.</p>
+                <p>التحقق يتم عبر API بشكل تلقائي داخل المتجر.</p>
+                <p>بعد إنشاء الفاتورة أدخل رقم العملية كما ظهر في شام كاش ثم اضغط تحقق.</p>
               </>
             ) : (
               <>
-                <p>ظٹط±ط¬ظ‰ ط¥ط¯ط®ط§ظ„ ط±ظ‚ظ… ط¹ظ…ظ„ظٹط© طµط­ظٹط­ ط£ظˆ ط±ظپط¹ ط¥ظٹطµط§ظ„ ظˆط§ط¶ط­.</p>
-                <p>ط§ظ„ط·ظ„ط¨ط§طھ طھط±ط³ظ„ ظ…ط¨ط§ط´ط±ط© ط¥ظ„ظ‰ ظ…ط¬ظ…ظˆط¹ط© ط§ظ„ظ…ط´ط±ظپظٹظ† ظ„ظ„ظ…ط±ط§ط¬ط¹ط©.</p>
+                <p>يرجى إدخال رقم عملية صحيح أو رفع إيصال واضح.</p>
+                <p>طلبات الإيداع اليدوي تُرسل للمشرفين للمراجعة.</p>
               </>
             )}
           </div>
         </div>
 
         <div className="bg-card border border-white/5 rounded-3xl p-5 shadow-lg">
-          <h3 className="font-bold text-foreground mb-4">طھظپط§طµظٹظ„ ط§ظ„طھط­ظˆظٹظ„</h3>
+          <h3 className="font-bold text-foreground mb-4">تفاصيل التحويل</h3>
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -454,16 +395,16 @@ export default function DepositMethod() {
                 name="currency"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>ط§ظ„ط¹ظ…ظ„ط©</FormLabel>
+                    <FormLabel>العملة</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger className="h-12 bg-background border-white/5 rounded-xl">
-                          <SelectValue placeholder="ط§ط®طھط± ط§ظ„ط¹ظ…ظ„ط©" />
+                          <SelectValue placeholder="اختر العملة" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="USD">ط¯ظˆظ„ط§ط± ط£ظ…ط±ظٹظƒظٹ (USD)</SelectItem>
-                        <SelectItem value="SYP">ظ„ظٹط±ط© ط³ظˆط±ظٹط© (SYP)</SelectItem>
+                        <SelectItem value="USD">دولار أمريكي (USD)</SelectItem>
+                        <SelectItem value="SYP">ليرة سورية (SYP)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -476,11 +417,11 @@ export default function DepositMethod() {
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ظ…ط­ظˆظ„</FormLabel>
+                    <FormLabel>المبلغ المحول</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
-                        placeholder="ط£ط¯ط®ظ„ ط§ظ„ظ…ط¨ظ„ط؛..."
+                        placeholder="أدخل المبلغ..."
                         {...field}
                         className="h-12 bg-background border-white/5 rounded-xl text-base"
                       />
@@ -496,13 +437,13 @@ export default function DepositMethod() {
                   name="transactionId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>ط±ظ‚ظ… ط§ظ„ط¹ظ…ظ„ظٹط© (Transaction ID/Ref)</FormLabel>
+                      <FormLabel>رقم العملية (Transaction ID/Ref)</FormLabel>
                       <FormControl>
                         <Input
                           type="text"
                           inputMode="numeric"
                           pattern="[0-9]*"
-                          placeholder="ط£ط¯ط®ظ„ ط±ظ‚ظ… ط¹ظ…ظ„ظٹط© ط§ظ„طھط­ظˆظٹظ„..."
+                          placeholder="أدخل رقم عملية التحويل..."
                           {...field}
                           onChange={(e) => field.onChange(e.target.value.replace(/\D+/g, ""))}
                           className="h-12 bg-background border-white/5 rounded-xl text-base font-mono"
@@ -520,7 +461,7 @@ export default function DepositMethod() {
                   name="proofImage"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>طµظˆط±ط© ط§ظ„ط¥ظٹطµط§ظ„ (ط§ط®طھظٹط§ط±ظٹ)</FormLabel>
+                      <FormLabel>صورة الإيصال (اختياري)</FormLabel>
                       <FormControl>
                         <div className="space-y-2">
                           <Input
@@ -531,15 +472,13 @@ export default function DepositMethod() {
                           />
                           {!isShamCashManual ? (
                             <Input
-                              placeholder="ط£ظˆ ط±ط§ط¨ط· طµظˆط±ط© ط§ظ„ط¥ظٹطµط§ظ„"
+                              placeholder="أو رابط صورة الإيصال"
                               value={field.value || ""}
                               onChange={(e) => field.onChange(e.target.value)}
                               className="h-12 bg-background border-white/5 rounded-xl text-base"
                             />
                           ) : null}
-                          {proofImageName ? (
-                            <div className="text-xs text-muted-foreground">ط§ظ„ظ…ظ„ظپ ط§ظ„ظ…ط­ط¯ط¯: {proofImageName}</div>
-                          ) : null}
+                          {proofImageName ? <div className="text-xs text-muted-foreground">الملف المحدد: {proofImageName}</div> : null}
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -552,52 +491,41 @@ export default function DepositMethod() {
                 <Button
                   type="submit"
                   disabled={createDeposit.isPending || autoLoading}
-                  className={`w-full h-14 rounded-2xl text-base font-bold text-white shadow-lg ${themeBg} hover:opacity-90 transition-opacity`}
+                  className="w-full h-14 rounded-2xl text-base font-bold text-white shadow-lg bg-cyan-600 hover:bg-cyan-500"
                 >
                   {method.code === "sham_cash_auto"
                     ? (autoLoading ? "جاري إنشاء الفاتورة..." : "إنشاء/تحديث الفاتورة")
-                    : (createDeposit.isPending ? "ط¬ط§ط±ظچ ط§ظ„ط¥ط±ط³ط§ظ„..." : "طھط£ظƒظٹط¯ ط§ظ„ط¯ظپط¹")}
+                    : (createDeposit.isPending ? "جاري الإرسال..." : "تأكيد الدفع")}
                 </Button>
               </div>
             </form>
           </Form>
+
           {isShamCashAuto && autoInvoice ? (
-            <div className="mt-5 space-y-3 rounded-2xl border border-white/10 bg-background/60 p-4">
-              <div className="text-sm font-semibold">
-                رقم العملية (Invoice ID): <span className="font-mono">{autoInvoice.invoiceId}</span>
-              </div>
+            <div className="mt-5 space-y-3 rounded-2xl border border-cyan-500/20 bg-background/70 p-4">
+              <div className="text-sm font-semibold">رقم العملية (Invoice ID): <span className="font-mono">{autoInvoice.invoiceId}</span></div>
               <div className="text-xs text-muted-foreground">
                 {autoInvoice.expiresAt
                   ? `تنتهي الفاتورة عند: ${new Date(autoInvoice.expiresAt).toLocaleString()}`
-                  : "يمكنك إعادة إنشاء فاتورة جديدة في أي وقت من نفس الصفحة."}
+                  : "يمكنك إنشاء فاتورة جديدة في أي وقت."}
               </div>
               <Input
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                placeholder="أدخل رقم العملية الذي ظهر في شام كاش"
+                placeholder="أدخل رقم العملية الذي ظهر في تطبيق شام كاش"
                 value={autoTransactionRef}
                 onChange={(e) => setAutoTransactionRef(e.target.value.replace(/\D+/g, ""))}
                 className="h-12 bg-background border-white/5 rounded-xl text-base font-mono"
               />
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  onClick={verifyAutoInvoice}
-                  disabled={autoVerifying}
-                  className="h-11 rounded-xl font-bold"
-                >
-                  {autoVerifying ? "جاري التحقق..." : "تحقق من العملية"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => window.open(autoInvoice.paymentUrl, "_blank")}
-                  className="h-11 rounded-xl font-bold"
-                >
-                  فتح صفحة الدفع
-                </Button>
-              </div>
+              <Button
+                type="button"
+                onClick={verifyAutoInvoice}
+                disabled={autoVerifying}
+                className="w-full h-11 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500"
+              >
+                {autoVerifying ? "جاري التحقق..." : "تحقق من العملية"}
+              </Button>
             </div>
           ) : null}
         </div>
@@ -605,7 +533,3 @@ export default function DepositMethod() {
     </div>
   );
 }
-
-
-
-
