@@ -1,4 +1,4 @@
-import { useGetProduct, getGetProductQueryKey, useCreateOrder } from "@workspace/api-client-react";
+﻿import { useGetProduct, getGetProductQueryKey, useCreateOrder } from "@workspace/api-client-react";
 import { useRoute, useLocation, Link } from "wouter";
 import { ChevronRight, ShoppingCart, AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -14,20 +14,20 @@ function detectPurchaseMode(categoryName: string, productType: string): Purchase
   const normalized = (categoryName || "").toLowerCase();
 
   if (
-    normalized.includes("رصيد") ||
+    normalized.includes("ط±طµظٹط¯") ||
     normalized.includes("balance") ||
-    normalized.includes("اتصالات") ||
+    normalized.includes("ط§طھطµط§ظ„ط§طھ") ||
     normalized.includes("internet") ||
     normalized.includes("numbers")
   ) {
     return "balance";
   }
 
-  if (normalized.includes("game") || normalized.includes("games") || normalized.includes("ألعاب")) {
+  if (normalized.includes("game") || normalized.includes("games") || normalized.includes("ط£ظ„ط¹ط§ط¨")) {
     return "games";
   }
 
-  if (normalized.includes("app") || normalized.includes("apps") || normalized.includes("تطبيق")) {
+  if (normalized.includes("app") || normalized.includes("apps") || normalized.includes("طھط·ط¨ظٹظ‚")) {
     return "apps";
   }
 
@@ -71,13 +71,12 @@ export default function ProductDetail() {
   }
 
   if (!product) {
-    return <div className="p-4 text-center mt-20">المنتج غير موجود</div>;
+    return <div className="p-4 text-center mt-20">ط§ظ„ظ…ظ†طھط¬ ط؛ظٹط± ظ…ظˆط¬ظˆط¯</div>;
   }
 
   const minQty = product.minQty || 1;
   const purchaseMode = detectPurchaseMode(product.categoryName, product.productType);
   const totalUsd = product.priceUsd * quantity;
-  const totalSyp = product.priceSyp * quantity;
 
   const commitQuantityInput = (rawValue?: string) => {
     const source = typeof rawValue === "string" ? rawValue : quantityInput;
@@ -117,11 +116,11 @@ export default function ProductDetail() {
 
     if (purchaseMode === "balance") {
       if (!phoneNumber.trim()) {
-        toast.error("يرجى إدخال رقم الخط");
+        toast.error("ظٹط±ط¬ظ‰ ط¥ط¯ط®ط§ظ„ ط±ظ‚ظ… ط§ظ„ط®ط·");
         return;
       }
     } else if (!accountId.trim()) {
-      toast.error("يرجى إدخال معرف المستخدم (ID)");
+      toast.error("ظٹط±ط¬ظ‰ ط¥ط¯ط®ط§ظ„ ظ…ط¹ط±ظپ ط§ظ„ظ…ط³طھط®ط¯ظ… (ID)");
       return;
     }
 
@@ -135,13 +134,13 @@ export default function ProductDetail() {
       },
       {
         onSuccess: (order) => {
-          toast.success("تم إرسال الطلب إلى API المزود بنجاح");
+          toast.success("طھظ… ط¥ط±ط³ط§ظ„ ط§ظ„ط·ظ„ط¨ ط¥ظ„ظ‰ API ط§ظ„ظ…ط²ظˆط¯ ط¨ظ†ط¬ط§ط­");
           queryClient.invalidateQueries({ queryKey: ["/api/me"] });
           queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
           setLocation(`/orders/${order.id}`);
         },
         onError: (err: any) => {
-          toast.error(err.response?.data?.message || "حدث خطأ أثناء تنفيذ الطلب");
+          toast.error(err.response?.data?.message || "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، طھظ†ظپظٹط° ط§ظ„ط·ظ„ط¨");
         },
       },
     );
@@ -174,9 +173,9 @@ export default function ProductDetail() {
         <div className="space-y-6 bg-card border border-white/5 p-5 rounded-3xl shadow-lg">
           <div>
             <div className="flex justify-between items-center mb-3">
-              <label className="text-sm font-bold text-foreground">الكمية</label>
+              <label className="text-sm font-bold text-foreground">ط§ظ„ظƒظ…ظٹط©</label>
               <span className="text-xs text-muted-foreground">
-                (الحد الأدنى: {minQty.toLocaleString()})
+                (ط§ظ„ط­ط¯ ط§ظ„ط£ط¯ظ†ظ‰: {minQty.toLocaleString()})
               </span>
             </div>
 
@@ -195,11 +194,11 @@ export default function ProductDetail() {
 
           {(purchaseMode === "apps" || purchaseMode === "games") && (
             <div>
-              <label className="text-sm font-bold text-foreground mb-3 block">ID المستخدم *</label>
+              <label className="text-sm font-bold text-foreground mb-3 block">ID ط§ظ„ظ…ط³طھط®ط¯ظ… *</label>
               <Input
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
-                placeholder="أدخل ID المستخدم"
+                placeholder="ط£ط¯ط®ظ„ ID ط§ظ„ظ…ط³طھط®ط¯ظ…"
                 className="h-12 bg-background border-white/5 rounded-2xl px-4 focus-visible:ring-primary/50 text-base"
               />
             </div>
@@ -208,10 +207,10 @@ export default function ProductDetail() {
           {purchaseMode === "balance" && (
             <div className="space-y-3">
               <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-emerald-400 font-bold text-sm">
-                الكمية المحددة: {quantity} وحدة
+                ط§ظ„ظƒظ…ظٹط© ط§ظ„ظ…ط­ط¯ط¯ط©: {quantity} ظˆط­ط¯ط©
               </div>
               <div>
-                <label className="text-sm font-bold text-foreground mb-3 block">رقم الخط *</label>
+                <label className="text-sm font-bold text-foreground mb-3 block">ط±ظ‚ظ… ط§ظ„ط®ط· *</label>
                 <Input
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
@@ -225,7 +224,7 @@ export default function ProductDetail() {
           {(purchaseMode === "apps" || purchaseMode === "games") && (
             <p className="text-xs text-accent flex items-center gap-1">
               <AlertCircle className="w-3 h-3" />
-              تأكد من صحة الـ ID قبل تنفيذ الشراء.
+              طھط£ظƒط¯ ظ…ظ† طµط­ط© ط§ظ„ظ€ ID ظ‚ط¨ظ„ طھظ†ظپظٹط° ط§ظ„ط´ط±ط§ط،.
             </p>
           )}
 
@@ -233,9 +232,8 @@ export default function ProductDetail() {
 
           {(purchaseMode === "apps" || purchaseMode === "games") && (
             <div className="rounded-2xl bg-background border border-white/5 p-4 text-center">
-              <div className="text-sm text-muted-foreground">السعر الإجمالي</div>
+              <div className="text-sm text-muted-foreground">ط§ظ„ط³ط¹ط± ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ</div>
               <div className="text-3xl font-black text-primary mt-1">${totalUsd.toFixed(5)}</div>
-              <div className="text-xs text-muted-foreground mt-1">{totalSyp.toLocaleString()} ل.س</div>
             </div>
           )}
 
@@ -244,10 +242,11 @@ export default function ProductDetail() {
             disabled={createOrder.isPending || !product.available}
             className="w-full h-14 rounded-2xl text-base font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25"
           >
-            {createOrder.isPending ? "جاري تنفيذ الطلب..." : "تأكيد الشراء"}
+            {createOrder.isPending ? "ط¬ط§ط±ظٹ طھظ†ظپظٹط° ط§ظ„ط·ظ„ط¨..." : "طھط£ظƒظٹط¯ ط§ظ„ط´ط±ط§ط،"}
           </Button>
         </div>
       </div>
     </div>
   );
 }
+

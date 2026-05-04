@@ -1,4 +1,4 @@
-import { useGetProfile, useListBanners, useListCategories, useListNews } from "@workspace/api-client-react";
+﻿import { useGetProfile, useListBanners, useListCategories, useListNews } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Wallet, Plus, BellRing, ChevronLeft } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,9 +32,9 @@ export default function Home() {
               </span>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">مرحبا بك في</p>
+              <p className="text-xs text-muted-foreground">ظ…ط±ط­ط¨ط§ ط¨ظƒ ظپظٹ</p>
               <p className="text-sm font-bold text-foreground">
-                {profileLoading ? <Skeleton className="h-4 w-20" /> : profile?.username || "ضيف"}
+                {profileLoading ? <Skeleton className="h-4 w-20" /> : profile?.username || "ط¶ظٹظپ"}
               </p>
             </div>
           </div>
@@ -63,22 +63,16 @@ export default function Home() {
               <div>
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <Wallet className="w-4 h-4 text-primary" />
-                  <span className="text-sm">الرصيد المتاح</span>
+                  <span className="text-sm">ط§ظ„ط±طµظٹط¯ ط§ظ„ظ…طھط§ط­</span>
                 </div>
                 <div className="text-3xl font-bold text-white mb-1 flex items-baseline gap-1">
                   <span className="text-primary">$</span>
                   {profileLoading ? <Skeleton className="h-8 w-24" /> : (profile?.balanceUsd || 0).toFixed(2)}
-                </div>
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <span>≈</span>
-                  {profileLoading ? <Skeleton className="h-3 w-16" /> : (profile?.balanceSyp || 0).toLocaleString()}
-                  <span>ل.س</span>
-                </div>
-              </div>
+                </div>              </div>
               <Link href="/deposit">
                 <div className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 rounded-full px-4 py-2 flex items-center gap-2 text-sm font-bold transition-transform active:scale-95 cursor-pointer">
                   <Plus className="w-4 h-4" />
-                  <span>شحن</span>
+                  <span>ط´ط­ظ†</span>
                 </div>
               </Link>
             </div>
@@ -129,7 +123,7 @@ export default function Home() {
       {/* Categories Grid */}
       <div className="px-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-foreground">الأقسام</h2>
+          <h2 className="text-lg font-bold text-foreground">ط§ظ„ط£ظ‚ط³ط§ظ…</h2>
         </div>
         
         {categoriesLoading ? (
@@ -167,3 +161,5 @@ export default function Home() {
     </div>
   );
 }
+
+
