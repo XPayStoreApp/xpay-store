@@ -33,6 +33,32 @@ function authHeaders() {
   };
 }
 
+async function findIncomingShamCashTransactionByRef(
+  walletIdentifier: string,
+  transactionRef: string,
+): Promise<{ found: boolean; amount?: number; currency?: string }> {
+  const txUrl = `${SAM_API_BASE_URL.replace(/\/+$/, "")}/v1/wallets/shamcash/${encodeURIComponent(walletIdentifier)}/transactions?direction=in`;
+  const resp = await fetch(txUrl, {
+    method: "GET",
+    headers: authHeaders(),
+  });
+  const payload: any = await resp.json().catch(() => ({}));
+  if (!resp.ok || !Array.isArray(payload)) {
+    return { found: false };
+  }
+
+  const match = payload.find((t: any) => String(t?.id || "").trim() === transactionRef);
+  if (!match) return { found: false };
+
+  const amount = Number(match?.amount);
+  const currency = String(match?.currency || "").toUpperCase();
+  return {
+    found: true,
+    amount: Number.isFinite(amount) ? amount : undefined,
+    currency: currency || undefined,
+  };
+}
+
 async function applyDepositStatusChangeAuto(id: number, status: "approved" | "rejected") {
   const [dep] = await db.select().from(depositsTable).where(eq(depositsTable.id, id)).limit(1);
   if (!dep) return { error: "not_found" as const };
@@ -450,6 +476,31 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
       await applyDepositStatusChangeAuto(dep.id, "approved");
       res.json({ ok: true, verified: true, message: verifyJson?.message || "verified" });
       return;
+    }
+
+    // Fallback: accept verification via incoming transactions lookup to avoid strict invoice window failures.
+    // This keeps auto-deposit usable when provider verify endpoint rejects by invoice time window.
+    const fallbackTx = await findIncomingShamCashTransactionByRef(
+      SAM_SHAMCASH_IDENTIFIER,
+      transactionRef,
+    );
+    if (fallbackTx.found) {
+      const depExpectedAmount = dep.currency === "SYP" ? Number(dep.amountSyp) : Number(dep.amountUsd);
+      const txAmount = Number(fallbackTx.amount || 0);
+      const txCurrency = String(fallbackTx.currency || "").toUpperCase();
+      const sameCurrency = !txCurrency || txCurrency === dep.currency;
+      const amountMatches = Number.isFinite(depExpectedAmount) && Number.isFinite(txAmount) && txAmount >= depExpectedAmount;
+
+      if (sameCurrency && amountMatches) {
+        await applyDepositStatusChangeAuto(dep.id, "approved");
+        res.json({
+          ok: true,
+          verified: true,
+          message: "تم التحقق من العملية عبر سجل معاملات شام كاش وإضافة الرصيد.",
+          via: "transactions_fallback",
+        });
+        return;
+      }
     }
 
     res.status(400).json({
