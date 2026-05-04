@@ -21,7 +21,14 @@ export default function Home() {
     : "---";
 
   return (
-    <div className="pb-8 animate-in fade-in duration-500">
+    <div className="relative pb-8 animate-in fade-in duration-500 overflow-hidden">
+      <div className="home-stars" aria-hidden="true">
+        <span className="shooting-star s1" />
+        <span className="shooting-star s2" />
+        <span className="shooting-star s3" />
+      </div>
+
+      <div className="relative z-10">
       {/* Header / Balance Card */}
       <div className="p-4 pt-6 bg-gradient-to-b from-card/50 to-transparent">
         <div className="flex justify-between items-center mb-6">
@@ -157,6 +164,7 @@ export default function Home() {
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
