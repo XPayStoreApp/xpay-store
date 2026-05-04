@@ -417,7 +417,7 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
     }
     res.status(500).json({
       error: "SHAMCASH_INVOICE_EXCEPTION",
-      message: error?.message || "failed_to_create_invoice",
+      message: error?.publicMessage || error?.message || "failed_to_create_invoice",
     });
   }
 });

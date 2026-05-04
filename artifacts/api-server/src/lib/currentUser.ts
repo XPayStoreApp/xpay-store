@@ -1,4 +1,4 @@
-import type { Request } from "express";
+﻿import type { Request } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -29,6 +29,13 @@ function readIdentityFromInitData(initDataRaw?: string): { telegramId: string; u
   }
 }
 
+function identityError(): never {
+  const err: any = new Error("telegram_identity_missing");
+  err.statusCode = 401;
+  err.publicMessage = "هوية تيليجرام غير متاحة. افتح المتجر من داخل Telegram Mini App.";
+  throw err;
+}
+
 function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { telegramId: string; username: string } {
   const hdr = req?.headers || {};
   const initDataRaw = hdr["x-telegram-init-data"] as string | undefined;
@@ -48,12 +55,8 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
 
   const telegramId = String(tgIdRaw || "").trim();
   if (!telegramId) {
-    if (opts?.strict) {
-      const err: any = new Error("telegram_identity_missing");
-      err.statusCode = 401;
-      err.publicMessage = "هوية تيليجرام غير متاحة. افتح المتجر من داخل Telegram Mini App.";
-      throw err;
-    }
+    if (opts?.strict) identityError();
+
     const allowFallback = process.env.ALLOW_DEFAULT_TELEGRAM_ID === "true";
     if (allowFallback) {
       return {
@@ -61,10 +64,7 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
         username: normalizeUsername(String(usernameRaw)),
       };
     }
-    const err: any = new Error("telegram_identity_missing");
-    err.statusCode = 401;
-    err.publicMessage = "هوية تيليجرام غير متاحة. افتح المتجر من داخل Telegram Mini App.";
-    throw err;
+    identityError();
   }
 
   return {
@@ -80,13 +80,13 @@ export function getShortAccountId(telegramId: string): string {
   return short.padStart(4, "0");
 }
 
-export async function getOrCreateCurrentUser(req?: Request) {
-  const identity = readTelegramIdentity(req);
+async function upsertCurrentUserByIdentity(identity: { telegramId: string; username: string }) {
   const existing = await db
     .select()
     .from(usersTable)
     .where(eq(usersTable.telegramId, identity.telegramId))
     .limit(1);
+
   if (existing.length > 0) {
     const current = existing[0]!;
     if (!current.username || current.username === DEFAULT_USERNAME) {
@@ -99,6 +99,7 @@ export async function getOrCreateCurrentUser(req?: Request) {
     }
     return current;
   }
+
   const inserted = await db
     .insert(usersTable)
     .values({
@@ -112,34 +113,12 @@ export async function getOrCreateCurrentUser(req?: Request) {
   return inserted[0]!;
 }
 
+export async function getOrCreateCurrentUser(req?: Request) {
+  const identity = readTelegramIdentity(req);
+  return upsertCurrentUserByIdentity(identity);
+}
+
 export async function getOrCreateCurrentUserStrict(req?: Request) {
   const identity = readTelegramIdentity(req, { strict: true });
-  const existing = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.telegramId, identity.telegramId))
-    .limit(1);
-  if (existing.length > 0) {
-    const current = existing[0]!;
-    if (!current.username || current.username === DEFAULT_USERNAME) {
-      const [updated] = await db
-        .update(usersTable)
-        .set({ username: identity.username })
-        .where(eq(usersTable.id, current.id))
-        .returning();
-      return updated ?? current;
-    }
-    return current;
-  }
-  const inserted = await db
-    .insert(usersTable)
-    .values({
-      telegramId: identity.telegramId,
-      username: identity.username,
-      balanceUsd: "0",
-      balanceSyp: "0",
-      role: "user",
-    })
-    .returning();
-  return inserted[0]!;
+  return upsertCurrentUserByIdentity(identity);
 }

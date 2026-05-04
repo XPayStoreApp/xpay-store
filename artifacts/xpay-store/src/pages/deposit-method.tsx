@@ -95,6 +95,8 @@ export default function DepositMethod() {
   const readTelegramIdentity = (): TelegramIdentity | null => {
     try {
       const tg = (window as any)?.Telegram?.WebApp;
+      if (tg?.ready) tg.ready();
+      if (tg?.expand) tg.expand();
       const user = tg?.initDataUnsafe?.user;
       const initData = String(tg?.initData || "").trim();
 
@@ -180,6 +182,11 @@ export default function DepositMethod() {
     if (method.code === "sham_cash_auto") {
       setAutoLoading(true);
       const tg = readTelegramIdentity();
+      if (!tg?.id) {
+        setAutoLoading(false);
+        toast.error("هوية تيليجرام غير متاحة. افتح المتجر من زر البوت داخل Telegram ثم أعد المحاولة.");
+        return;
+      }
       const invoiceUrl = tg?.id
         ? `${apiBaseUrl}/api/deposits/shamcash/invoice?tg_id=${encodeURIComponent(tg.id)}&tg_username=${encodeURIComponent(tg.username || "")}`
         : `${apiBaseUrl}/api/deposits/shamcash/invoice`;
