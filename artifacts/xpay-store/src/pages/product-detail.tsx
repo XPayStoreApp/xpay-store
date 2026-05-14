@@ -14,20 +14,20 @@ function detectPurchaseMode(categoryName: string, productType: string): Purchase
   const normalized = (categoryName || "").toLowerCase();
 
   if (
-    normalized.includes("ط±طµظٹط¯") ||
+    normalized.includes("رصيد") ||
     normalized.includes("balance") ||
-    normalized.includes("ط§طھطµط§ظ„ط§طھ") ||
+    normalized.includes("اتصالات") ||
     normalized.includes("internet") ||
     normalized.includes("numbers")
   ) {
     return "balance";
   }
 
-  if (normalized.includes("game") || normalized.includes("games") || normalized.includes("ط£ظ„ط¹ط§ط¨")) {
+  if (normalized.includes("game") || normalized.includes("games") || normalized.includes("ألعاب")) {
     return "games";
   }
 
-  if (normalized.includes("app") || normalized.includes("apps") || normalized.includes("طھط·ط¨ظٹظ‚")) {
+  if (normalized.includes("app") || normalized.includes("apps") || normalized.includes("تطبيق")) {
     return "apps";
   }
 
@@ -71,7 +71,7 @@ export default function ProductDetail() {
   }
 
   if (!product) {
-    return <div className="p-4 text-center mt-20">ط§ظ„ظ…ظ†طھط¬ ط؛ظٹط± ظ…ظˆط¬ظˆط¯</div>;
+    return <div className="p-4 text-center mt-20">المنتج غير موجود</div>;
   }
 
   const minQty = product.minQty || 1;
@@ -116,11 +116,11 @@ export default function ProductDetail() {
 
     if (purchaseMode === "balance") {
       if (!phoneNumber.trim()) {
-        toast.error("ظٹط±ط¬ظ‰ ط¥ط¯ط®ط§ظ„ ط±ظ‚ظ… ط§ظ„ط®ط·");
+        toast.error("يرجى إدخال رقم الخط");
         return;
       }
     } else if (!accountId.trim()) {
-      toast.error("ظٹط±ط¬ظ‰ ط¥ط¯ط®ط§ظ„ ظ…ط¹ط±ظپ ط§ظ„ظ…ط³طھط®ط¯ظ… (ID)");
+      toast.error("يرجى إدخال معرف المستخدم (ID)");
       return;
     }
 
@@ -134,13 +134,13 @@ export default function ProductDetail() {
       },
       {
         onSuccess: (order) => {
-          toast.success("طھظ… ط¥ط±ط³ط§ظ„ ط§ظ„ط·ظ„ط¨ ط¥ظ„ظ‰ API ط§ظ„ظ…ط²ظˆط¯ ط¨ظ†ط¬ط§ط­");
+          toast.success("تم إرسال الطلب إلى API المزود بنجاح");
           queryClient.invalidateQueries({ queryKey: ["/api/me"] });
           queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
           setLocation(`/orders/${order.id}`);
         },
         onError: (err: any) => {
-          toast.error(err.response?.data?.message || "ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، طھظ†ظپظٹط° ط§ظ„ط·ظ„ط¨");
+          toast.error(err.response?.data?.message || "حدث خطأ أثناء تنفيذ الطلب");
         },
       },
     );
@@ -173,10 +173,8 @@ export default function ProductDetail() {
         <div className="space-y-6 bg-card border border-white/5 p-5 rounded-3xl shadow-lg">
           <div>
             <div className="flex justify-between items-center mb-3">
-              <label className="text-sm font-bold text-foreground">ط§ظ„ظƒظ…ظٹط©</label>
-              <span className="text-xs text-muted-foreground">
-                (ط§ظ„ط­ط¯ ط§ظ„ط£ط¯ظ†ظ‰: {minQty.toLocaleString()})
-              </span>
+              <label className="text-sm font-bold text-foreground">الكمية</label>
+              <span className="text-xs text-muted-foreground">(الحد الأدنى: {minQty.toLocaleString()})</span>
             </div>
 
             <div className="bg-background border border-white/5 p-2 rounded-2xl">
@@ -194,11 +192,11 @@ export default function ProductDetail() {
 
           {(purchaseMode === "apps" || purchaseMode === "games") && (
             <div>
-              <label className="text-sm font-bold text-foreground mb-3 block">ID ط§ظ„ظ…ط³طھط®ط¯ظ… *</label>
+              <label className="text-sm font-bold text-foreground mb-3 block">ID المستخدم *</label>
               <Input
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
-                placeholder="ط£ط¯ط®ظ„ ID ط§ظ„ظ…ط³طھط®ط¯ظ…"
+                placeholder="أدخل ID المستخدم"
                 className="h-12 bg-background border-white/5 rounded-2xl px-4 focus-visible:ring-primary/50 text-base"
               />
             </div>
@@ -207,10 +205,10 @@ export default function ProductDetail() {
           {purchaseMode === "balance" && (
             <div className="space-y-3">
               <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-emerald-400 font-bold text-sm">
-                ط§ظ„ظƒظ…ظٹط© ط§ظ„ظ…ط­ط¯ط¯ط©: {quantity} ظˆط­ط¯ط©
+                الكمية المحددة: {quantity} وحدة
               </div>
               <div>
-                <label className="text-sm font-bold text-foreground mb-3 block">ط±ظ‚ظ… ط§ظ„ط®ط· *</label>
+                <label className="text-sm font-bold text-foreground mb-3 block">رقم الخط *</label>
                 <Input
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
@@ -224,7 +222,7 @@ export default function ProductDetail() {
           {(purchaseMode === "apps" || purchaseMode === "games") && (
             <p className="text-xs text-accent flex items-center gap-1">
               <AlertCircle className="w-3 h-3" />
-              طھط£ظƒط¯ ظ…ظ† طµط­ط© ط§ظ„ظ€ ID ظ‚ط¨ظ„ طھظ†ظپظٹط° ط§ظ„ط´ط±ط§ط،.
+              تأكد من صحة الـ ID قبل تنفيذ الشراء.
             </p>
           )}
 
@@ -232,7 +230,7 @@ export default function ProductDetail() {
 
           {(purchaseMode === "apps" || purchaseMode === "games") && (
             <div className="rounded-2xl bg-background border border-white/5 p-4 text-center">
-              <div className="text-sm text-muted-foreground">ط§ظ„ط³ط¹ط± ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ</div>
+              <div className="text-sm text-muted-foreground">السعر الإجمالي</div>
               <div className="text-3xl font-black text-primary mt-1">${totalUsd.toFixed(5)}</div>
             </div>
           )}
@@ -242,11 +240,10 @@ export default function ProductDetail() {
             disabled={createOrder.isPending || !product.available}
             className="w-full h-14 rounded-2xl text-base font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25"
           >
-            {createOrder.isPending ? "ط¬ط§ط±ظٹ طھظ†ظپظٹط° ط§ظ„ط·ظ„ط¨..." : "طھط£ظƒظٹط¯ ط§ظ„ط´ط±ط§ط،"}
+            {createOrder.isPending ? "جاري تنفيذ الطلب..." : "تأكيد الشراء"}
           </Button>
         </div>
       </div>
     </div>
   );
 }
-
