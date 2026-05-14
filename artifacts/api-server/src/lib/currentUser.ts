@@ -29,6 +29,36 @@ function readIdentityFromInitData(initDataRaw?: string): { telegramId: string; u
   }
 }
 
+function tryParseIdentityFromAnyRaw(rawInput?: string): { telegramId: string; username: string } | null {
+  const raw = String(rawInput || "").trim();
+  if (!raw) return null;
+
+  // case 1: full initData query string
+  const direct = readIdentityFromInitData(raw);
+  if (direct) return direct;
+
+  // case 2: encoded initData
+  try {
+    const decoded = decodeURIComponent(raw);
+    const fromDecoded = readIdentityFromInitData(decoded);
+    if (fromDecoded) return fromDecoded;
+  } catch {}
+
+  // case 3: string that still contains tgWebAppData=...
+  try {
+    const full = new URLSearchParams(raw);
+    const tgWebAppData = full.get("tgWebAppData");
+    if (tgWebAppData) {
+      const nested =
+        readIdentityFromInitData(tgWebAppData) ||
+        readIdentityFromInitData(decodeURIComponent(tgWebAppData));
+      if (nested) return nested;
+    }
+  } catch {}
+
+  return null;
+}
+
 function identityError(): never {
   const err: any = new Error("telegram_identity_missing");
   err.statusCode = 401;
@@ -39,15 +69,22 @@ function identityError(): never {
 function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { telegramId: string; username: string } {
   const hdr = req?.headers || {};
   const initDataRaw = hdr["x-telegram-init-data"] as string | undefined;
-  const parsedFromInitData = readIdentityFromInitData(initDataRaw);
+  const queryTgWebAppData = req?.query?.["tgWebAppData"] as string | undefined;
+  const bodyInitData = (req as any)?.body?.telegramInitData as string | undefined;
+  const parsedFromInitData =
+    tryParseIdentityFromAnyRaw(initDataRaw) ||
+    tryParseIdentityFromAnyRaw(queryTgWebAppData) ||
+    tryParseIdentityFromAnyRaw(bodyInitData);
   if (parsedFromInitData?.telegramId) return parsedFromInitData;
 
   const tgIdRaw =
     (hdr["x-telegram-id"] as string | undefined) ||
-    (req?.query?.["tg_id"] as string | undefined);
+    (req?.query?.["tg_id"] as string | undefined) ||
+    ((req as any)?.body?.telegramId as string | undefined);
   const usernameRaw =
     (hdr["x-telegram-username"] as string | undefined) ||
     (req?.query?.["tg_username"] as string | undefined) ||
+    ((req as any)?.body?.telegramUsername as string | undefined) ||
     [hdr["x-telegram-first-name"], hdr["x-telegram-last-name"]]
       .filter(Boolean)
       .join(" ") ||

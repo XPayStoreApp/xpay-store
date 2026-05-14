@@ -54,6 +54,27 @@ type TelegramIdentity = {
   initDataRaw: string;
 };
 
+function parseIdentityFromInitDataRaw(rawInitData?: string): TelegramIdentity | null {
+  try {
+    const raw = String(rawInitData || "").trim();
+    if (!raw) return null;
+    const p = new URLSearchParams(raw);
+    const userRaw = p.get("user");
+    if (!userRaw) return null;
+    const user = JSON.parse(userRaw);
+    if (!user?.id) return null;
+    return {
+      id: String(user.id),
+      username: String(user.username || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "TelegramUser"),
+      firstName: String(user.first_name || ""),
+      lastName: String(user.last_name || ""),
+      initDataRaw: raw,
+    };
+  } catch {
+    return null;
+  }
+}
+
 type AutoInvoiceState = {
   depositId: number;
   invoiceId: string;
@@ -118,21 +139,12 @@ export default function DepositMethod() {
       const webAppData = search.get("tgWebAppData") || hash.get("tgWebAppData");
 
       if (webAppData) {
-        const init = new URLSearchParams(webAppData);
-        const userRaw = init.get("user");
-        if (userRaw) {
-          const parsedUser = JSON.parse(userRaw);
-          if (parsedUser?.id) {
-            const identity: TelegramIdentity = {
-              id: String(parsedUser.id),
-              username: String(parsedUser.username || `${parsedUser.first_name || ""} ${parsedUser.last_name || ""}`.trim() || "TelegramUser"),
-              firstName: String(parsedUser.first_name || ""),
-              lastName: String(parsedUser.last_name || ""),
-              initDataRaw: String(webAppData),
-            };
-            localStorage.setItem("tg_identity_cache", JSON.stringify(identity));
-            return identity;
-          }
+        const identity =
+          parseIdentityFromInitDataRaw(webAppData) ||
+          parseIdentityFromInitDataRaw(decodeURIComponent(webAppData));
+        if (identity?.id) {
+          localStorage.setItem("tg_identity_cache", JSON.stringify(identity));
+          return identity;
         }
       }
 
