@@ -5,6 +5,7 @@ import router from "./routes";
 import adminRouter from "./routes/admin";
 import { logger } from "./lib/logger";
 import { sessionMiddleware } from "./lib/adminAuth";
+import { primeTelegramIntegrations } from "./lib/telegram";
 
 const app: Express = express();
 app.set("trust proxy", 1);
@@ -57,6 +58,8 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(sessionMiddleware);
+
+primeTelegramIntegrations();
 
 app.use("/api", router);
 app.use("/api", adminRouter);
