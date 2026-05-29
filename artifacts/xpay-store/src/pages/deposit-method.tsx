@@ -258,8 +258,11 @@ export default function DepositMethod() {
             expiresAt: payload.expiresAt || null,
           });
           setAutoTransactionRef("");
-          toast.success(`تم إنشاء الفاتورة بنجاح. رقم العملية: ${invoiceId}`);
+          toast.success("تم تأكيد الإيداع. أدخل رقم العملية في صفحة التحقق.");
           queryClient.invalidateQueries({ queryKey: ["/api/deposits"] });
+          setLocation(
+            `/deposit/sham_cash_auto/invoice?invoiceId=${encodeURIComponent(invoiceId)}&depositId=${encodeURIComponent(String(payload.depositId || ""))}&expiresAt=${encodeURIComponent(String(payload.expiresAt || ""))}`,
+          );
         })
         .catch((err: any) => {
           toast.error(err?.message || "فشل إنشاء فاتورة شام كاش");
@@ -343,7 +346,7 @@ export default function DepositMethod() {
       }
 
       if (payload?.code === "EXPIRED") {
-        toast.error("انتهت صلاحية الفاتورة. اضغط إنشاء/تحديث الفاتورة.");
+        toast.error("انتهت صلاحية الفاتورة. ارجع واضغط تأكيد الإيداع مرة أخرى.");
         return;
       }
 
@@ -549,7 +552,7 @@ export default function DepositMethod() {
                   className="w-full h-14 rounded-2xl text-base font-bold text-primary-foreground shadow-lg bg-primary hover:bg-primary/90"
                 >
                   {method.code === "sham_cash_auto"
-                    ? (autoLoading ? "جاري إنشاء الفاتورة..." : "إنشاء/تحديث الفاتورة")
+                    ? (autoLoading ? "جاري تأكيد الإيداع..." : "تأكيد الإيداع")
                     : (createDeposit.isPending ? "جاري الإرسال..." : "تأكيد الدفع")}
                 </Button>
               </div>

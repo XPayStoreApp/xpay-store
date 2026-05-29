@@ -1,4 +1,4 @@
-type InlineButton = { text: string; callback_data: string };
+﻿type InlineButton = { text: string; callback_data: string };
 
 const ADMIN_BOT_TOKEN = process.env.TELEGRAM_ADMIN_BOT_TOKEN || "";
 const STORE_BOT_TOKEN = process.env.TELEGRAM_STORE_BOT_TOKEN || "";
@@ -185,13 +185,12 @@ export async function notifyUserDepositApproved(args: {
   operationNumber: string;
 }) {
   const msg =
-    `✅ تم التحقق بنجاح!\n` +
+    `✅ تم التحقق من الإيداع بنجاح!\n` +
     `تمت إضافة $${args.addedUsd.toFixed(3)} إلى رصيدك.\n` +
     `رصيدك الحالي: $${args.currentUsd.toFixed(3)}\n\n` +
     `رقم العملية: ${args.operationNumber}`;
   await sendTelegramMessage("store", args.telegramId, msg);
 }
-
 export async function notifyUserDepositPending(args: {
   telegramId: string;
   operationNumber: string;
@@ -200,23 +199,22 @@ export async function notifyUserDepositPending(args: {
 }) {
   const amountLabel = args.currency === "USD" ? `${args.amount.toFixed(3)}$` : `${args.amount.toFixed(0)}.SY`;
   const msg =
-    `⏳ تم استلام طلب الإيداع وهو الآن قيد الانتظار.\n` +
+    `⏳ تم استلام طلب الإيداع وهو الآن قيد المراجعة.\n` +
     `المبلغ: ${amountLabel}\n` +
     `رقم العملية: ${args.operationNumber}\n\n` +
-    `سيصلك إشعار تلقائي بعد التحقق.`;
+    `انتظر قليلاً، سيصلك إشعار تلقائي عند قبول أو رفض العملية.`;
   await sendTelegramMessage("store", args.telegramId, msg);
 }
-
 export async function notifyUserDepositRejected(args: {
   telegramId: string;
   operationNumber: string;
 }) {
   const msg =
-    `❌ لم يتم العثور على عملية دفع مطابقة أو المبلغ غير صحيح.\n` +
+    `❌ تم رفض عملية الإيداع.\n` +
+    `لم يتم العثور على عملية دفع مطابقة أو أن المبلغ غير صحيح.\n\n` +
     `رقم العملية: ${args.operationNumber}`;
   await sendTelegramMessage("store", args.telegramId, msg);
 }
-
 export async function notifyUserOrderCreated(args: {
   telegramId: string;
   productName: string;
@@ -280,3 +278,4 @@ export async function notifyUserOrderStatusChanged(args: {
 
   await sendTelegramMessage("store", args.telegramId, msg);
 }
+
