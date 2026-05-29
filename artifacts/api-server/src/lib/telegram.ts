@@ -230,20 +230,25 @@ export async function notifyUserOrderCreated(args: {
   const isRejected = args.status === "reject";
   const statusLabel = isAccepted ? "مكتمل" : isRejected ? "مرفوض" : "قيد الانتظار";
   const statusIcon = isAccepted ? "✅" : isRejected ? "❌" : "⏳";
+  const title = isAccepted
+    ? `✅ تم شراء "${args.productName}"`
+    : isRejected
+      ? `❌ تم رفض شراء "${args.productName}"`
+      : `⏳ طلب شراء "${args.productName}" قيد الانتظار`;
   const reminderLine = isAccepted
     ? "تم تنفيذ طلبك بنجاح."
     : isRejected
-      ? "تم رفض الطلب. راجع التفاصيل أو تواصل مع الدعم إذا لزم."
+      ? "تم رفض الطلب من المزود، وتمت إعادة المبلغ إن كان قد خُصم."
       : "سنقوم بتذكيرك تلقائياً فور تحديث حالة الطلب من المزود.";
 
   const msg =
-    `✅ تم شراء "${args.productName}"\n` +
+    `${title}\n` +
     `💰 السعر: ${args.priceUsd.toFixed(3)}$\n` +
     `💳 الرصيد قبل: ${args.balanceBefore.toFixed(3)}$\n` +
     `💳 الرصيد بعد: ${args.balanceAfter.toFixed(3)}$\n` +
     `🔢 رقم الطلب: ${args.orderNumber}\n` +
     `📎 آيدي اللاعب: ${args.playerId}\n` +
-    `🕓 حالة الطلب: ${args.status}\n\n` +
+    `🕓 حالة الطلب من المزود: ${statusIcon} ${args.status}\n\n` +
     `📊 الحالة الحالية: ${statusIcon} ${statusLabel}\n` +
     `🔔 التذكير: ${reminderLine}\n` +
     `التفاصيل: ${args.details}`;

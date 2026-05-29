@@ -70,6 +70,50 @@ function normalizeProviderOrderStatus(status: string | null | undefined): "wait"
   return "wait";
 }
 
+function resolveProviderOrderStatus(result: { success?: boolean; status?: string; error?: string } | null | undefined): "wait" | "accept" | "reject" {
+  if (!result) return "wait";
+  const normalized = normalizeProviderOrderStatus(result.status);
+  if (normalized !== "wait") return normalized;
+  if (result.success === false || result.error) return "reject";
+  return "wait";
+}
+
+function orderStatusMessage(status: "wait" | "accept" | "reject"): string {
+  if (status === "accept") return "✅ تم الشراء وتنفيذ الطلب بنجاح.";
+  if (status === "reject") return "❌ تم رفض الطلب من المزود وتم إرجاع المبلغ إلى رصيدك.";
+  return "⏳ طلبك قيد الانتظار لدى المزود، سنخبرك تلقائياً عند تحديث الحالة.";
+}
+
+async function checkProviderOrderImmediately(args: {
+  adapter: NonNullable<ReturnType<typeof getAdapter>>;
+  provider: typeof providersTable.$inferSelect;
+  providerOrderId?: string;
+}): Promise<{
+  status: "wait" | "accept" | "reject";
+  remoteStatus?: string;
+  rawData?: any;
+  replayApi?: any[];
+} | null> {
+  const providerOrderId = String(args.providerOrderId || "").trim();
+  if (!providerOrderId || !args.adapter.checkOrders || !args.provider.apiKey) return null;
+
+  try {
+    const checked = await args.adapter.checkOrders(args.provider.apiKey, args.provider.apiUrl || undefined, [providerOrderId]);
+    const remote = checked.orders.find((item) => String(item.providerOrderId) === providerOrderId);
+    if (!remote) return null;
+
+    return {
+      status: normalizeProviderOrderStatus(remote.status),
+      remoteStatus: remote.status,
+      rawData: remote.rawData || null,
+      replayApi: remote.replayApi || undefined,
+    };
+  } catch (error) {
+    console.error(`Immediate provider order check failed for ${providerOrderId}:`, error);
+    return null;
+  }
+}
+
 async function refundRejectedOrderIfNeeded(args: {
   orderId: number;
   userId: number;
@@ -161,7 +205,7 @@ async function syncPendingProviderOrdersForUser(userId: number): Promise<void> {
           orderNumber: order.orderNumber,
           productName: product.name,
           status: nextStatus,
-          note: nextStatus === "accept" ? "تمت العملية بنجاح." : "تم رفض الطلب من المزود وإرجاع المبلغ.",
+          note: orderStatusMessage(nextStatus),
         });
       } catch (error) {
         console.error("Notify provider order status user failed:", error);
@@ -373,7 +417,27 @@ router.post("/orders", async (req, res) => {
       }
     }
 
-    const finalOrderStatus = product.providerId ? normalizeProviderOrderStatus(providerOrderResult?.status) : "accept";
+    let finalOrderStatus = product.providerId ? resolveProviderOrderStatus(providerOrderResult) : "accept";
+    let immediateProviderCheck: Awaited<ReturnType<typeof checkProviderOrderImmediately>> = null;
+
+    if (
+      product.providerId &&
+      providerForOrder &&
+      adapterForOrder &&
+      finalOrderStatus === "wait" &&
+      providerOrderResult?.providerOrderId
+    ) {
+      immediateProviderCheck = await checkProviderOrderImmediately({
+        adapter: adapterForOrder,
+        provider: providerForOrder,
+        providerOrderId: providerOrderResult.providerOrderId,
+      });
+
+      if (immediateProviderCheck?.status && immediateProviderCheck.status !== "wait") {
+        finalOrderStatus = immediateProviderCheck.status;
+      }
+    }
+
     const meta: any = {
       pricing: {
         providerUnitPriceUsd,
@@ -390,6 +454,17 @@ router.post("/orders", async (req, res) => {
         replayApi: providerOrderResult.replayApi,
         error: providerOrderResult.error,
       };
+
+      if (immediateProviderCheck) {
+        meta.provider.immediateCheck = {
+          status: immediateProviderCheck.remoteStatus,
+          rawData: immediateProviderCheck.rawData,
+          replayApi: immediateProviderCheck.replayApi,
+          checkedAt: new Date().toISOString(),
+        };
+        meta.provider.status = immediateProviderCheck.remoteStatus || meta.provider.status;
+        meta.provider.replayApi = immediateProviderCheck.replayApi || meta.provider.replayApi;
+      }
     }
 
     const inserted = await db.transaction(async (tx) => {
