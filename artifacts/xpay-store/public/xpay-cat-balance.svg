@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="768" viewBox="0 0 768 768" direction="rtl">
+  <defs>
+    <radialGradient id="g1xpaycatbalancesvg" cx="18%" cy="10%" r="70%">
+      <stop offset="0" stop-color="#58E8FF" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#121A3C" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#07091B"/>
+    </radialGradient>
+    <linearGradient id="g2xpaycatbalancesvg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#58E8FF"/>
+      <stop offset="1" stop-color="#35FFC8"/>
+    </linearGradient>
+    <filter id="glowxpaycatbalancesvg" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="11" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="768" height="768" rx="82" fill="url(#g1xpaycatbalancesvg)"/>
+  <path d="M68 104 C210 34 318 58 455 105 C560 141 625 130 704 78" fill="none" stroke="#58E8FF" stroke-opacity="0.28" stroke-width="4"/>
+  <path d="M88 642 C224 574 332 606 450 644 C562 680 642 650 710 610" fill="none" stroke="#35FFC8" stroke-opacity="0.22" stroke-width="4"/>
+  <circle cx="100" cy="122" r="8" fill="#58E8FF" opacity="0.9"/>
+  <circle cx="656" cy="168" r="6" fill="#35FFC8" opacity="0.85"/>
+  <circle cx="596" cy="606" r="7" fill="#FFFFFF" opacity="0.55"/>
+  <g opacity="0.18" stroke="#FFFFFF" stroke-width="2" fill="none">
+    <path d="M112 236h118v118H112z"/><path d="M548 246h92v92h-92z"/><path d="M154 514h78v78h-78z"/>
+    <path d="M476 132l34 34-34 34-34-34z"/><path d="M524 520l48 48-48 48-48-48z"/>
+  </g>
+  <g filter="url(#glowxpaycatbalancesvg)">
+    <circle cx="384" cy="318" r="138" fill="url(#g2xpaycatbalancesvg)" opacity="0.95"/>
+    <circle cx="384" cy="318" r="106" fill="#07091B" opacity="0.72"/>
+    <text x="384" y="360" text-anchor="middle" font-family="Cairo, Tahoma, Arial, sans-serif" font-size="116" font-weight="800" fill="#F0FDFF">$</text>
+  </g>
+  <text x="384" y="548" text-anchor="middle" font-family="Cairo, Tahoma, Arial, sans-serif" font-size="46" font-weight="800" fill="#F0FDFF">??? ??????</text>
+  <text x="384" y="604" text-anchor="middle" font-family="Cairo, Tahoma, Arial, sans-serif" font-size="30" font-weight="700" fill="#58E8FF">????</text>
+  <text x="384" y="684" text-anchor="middle" font-family="Cairo, Tahoma, Arial, sans-serif" font-size="34" font-weight="800" fill="#FFFFFF" opacity="0.78">XPayStore</text>
+</svg>

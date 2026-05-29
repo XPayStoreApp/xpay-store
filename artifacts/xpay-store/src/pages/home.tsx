@@ -7,6 +7,20 @@ import useEmblaCarousel from "embla-carousel-react";
 import Autoplay from "embla-carousel-autoplay";
 import { motion } from "framer-motion";
 
+function getBrandedCategoryImage(categoryName: string, fallback?: string | null): string {
+  const name = String(categoryName || "").trim().toLowerCase();
+
+  if (name.includes("تطبيق") || name.includes("app")) return "/xpay-cat-apps.svg";
+  if (name.includes("لعب") || name.includes("game")) return "/xpay-cat-games.svg";
+  if (name.includes("رصيد") || name.includes("balance")) return "/xpay-cat-balance.svg";
+  if (name.includes("ميديا") || name.includes("سوشل") || name.includes("social")) return "/xpay-cat-media.svg";
+  if (name.includes("شات") || name.includes("chat")) return "/xpay-cat-chat.svg";
+  if (name.includes("رقم") || name.includes("number")) return "/xpay-cat-numbers.svg";
+  if (name.includes("بطاق") || name.includes("card")) return "/xpay-cat-cards.svg";
+
+  return fallback || "/xpay-cat-apps.svg";
+}
+
 export default function Home() {
   const { data: profile, isLoading: profileLoading } = useGetProfile();
   const { data: news, isLoading: newsLoading } = useListNews();
@@ -150,7 +164,11 @@ export default function Home() {
                     className="flex flex-col items-center gap-2 cursor-pointer group"
                   >
                     <div className="w-full aspect-square rounded-2xl bg-card border border-white/5 overflow-hidden relative shadow-lg group-hover:border-primary/30 transition-colors">
-                      <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                      <img
+                        src={getBrandedCategoryImage(cat.name, cat.image)}
+                        alt={cat.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
                       <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
                     </div>
                     <span className="text-[11px] font-semibold text-center text-muted-foreground group-hover:text-primary transition-colors leading-tight">
