@@ -54,6 +54,8 @@ type TelegramIdentity = {
   initDataRaw: string;
 };
 
+const TELEGRAM_IDENTITY_CACHE_KEY = "xpay_telegram_identity";
+
 function parseIdentityFromInitDataRaw(rawInitData?: string): TelegramIdentity | null {
   try {
     const raw = String(rawInitData || "").trim();
@@ -73,6 +75,36 @@ function parseIdentityFromInitDataRaw(rawInitData?: string): TelegramIdentity | 
   } catch {
     return null;
   }
+}
+
+function getTelegramWebAppDataFromUrl(): string {
+  try {
+    const search = new URLSearchParams(window.location.search || "");
+    const hashRaw = String(window.location.hash || "").replace(/^#/, "");
+    const hash = new URLSearchParams(hashRaw);
+    return String(search.get("tgWebAppData") || hash.get("tgWebAppData") || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function parseIdentityFromWebAppData(webAppData?: string): TelegramIdentity | null {
+  const raw = String(webAppData || "").trim();
+  if (!raw) return null;
+
+  const attempts = [raw];
+  try {
+    attempts.push(decodeURIComponent(raw));
+  } catch {
+    // keep the raw attempt
+  }
+
+  for (const item of attempts) {
+    const parsed = parseIdentityFromInitDataRaw(item);
+    if (parsed?.id) return parsed;
+  }
+
+  return null;
 }
 
 type AutoInvoiceState = {
@@ -129,26 +161,19 @@ export default function DepositMethod() {
           lastName: String(user.last_name || ""),
           initDataRaw: initData,
         };
-        localStorage.setItem("tg_identity_cache", JSON.stringify(identity));
+        localStorage.setItem(TELEGRAM_IDENTITY_CACHE_KEY, JSON.stringify(identity));
         return identity;
       }
 
-      const search = new URLSearchParams(window.location.search || "");
-      const hashRaw = String(window.location.hash || "").replace(/^#/, "");
-      const hash = new URLSearchParams(hashRaw);
-      const webAppData = search.get("tgWebAppData") || hash.get("tgWebAppData");
-
-      if (webAppData) {
-        const identity =
-          parseIdentityFromInitDataRaw(webAppData) ||
-          parseIdentityFromInitDataRaw(decodeURIComponent(webAppData));
-        if (identity?.id) {
-          localStorage.setItem("tg_identity_cache", JSON.stringify(identity));
-          return identity;
-        }
+      const identity = parseIdentityFromWebAppData(getTelegramWebAppDataFromUrl());
+      if (identity?.id) {
+        localStorage.setItem(TELEGRAM_IDENTITY_CACHE_KEY, JSON.stringify(identity));
+        return identity;
       }
 
-      const cachedRaw = localStorage.getItem("tg_identity_cache");
+      const cachedRaw =
+        localStorage.getItem(TELEGRAM_IDENTITY_CACHE_KEY) ||
+        localStorage.getItem("tg_identity_cache");
       if (!cachedRaw) return null;
       const cached = JSON.parse(cachedRaw);
       return cached?.id ? (cached as TelegramIdentity) : null;
@@ -194,11 +219,7 @@ export default function DepositMethod() {
     if (method.code === "sham_cash_auto") {
       setAutoLoading(true);
       const tg = readTelegramIdentity();
-      if (!tg?.id) {
-        setAutoLoading(false);
-        toast.error("هوية تيليجرام غير متاحة. افتح المتجر من زر البوت داخل Telegram ثم أعد المحاولة.");
-        return;
-      }
+      const webAppData = getTelegramWebAppDataFromUrl();
       const invoiceUrl = tg?.id
         ? `${apiBaseUrl}/api/deposits/shamcash/invoice?tg_id=${encodeURIComponent(tg.id)}&tg_username=${encodeURIComponent(tg.username || "")}`
         : `${apiBaseUrl}/api/deposits/shamcash/invoice`;
@@ -211,7 +232,7 @@ export default function DepositMethod() {
           ...(tg?.username ? { "x-telegram-username": tg.username } : {}),
           ...(tg?.firstName ? { "x-telegram-first-name": tg.firstName } : {}),
           ...(tg?.lastName ? { "x-telegram-last-name": tg.lastName } : {}),
-          ...(tg?.initDataRaw ? { "x-telegram-init-data": tg.initDataRaw } : {}),
+          ...(tg?.initDataRaw || webAppData ? { "x-telegram-init-data": tg?.initDataRaw || webAppData } : {}),
         },
         body: JSON.stringify({
           amount: values.amount,
@@ -220,7 +241,8 @@ export default function DepositMethod() {
           telegramUsername: tg?.username || "",
           telegramFirstName: tg?.firstName || "",
           telegramLastName: tg?.lastName || "",
-          telegramInitData: tg?.initDataRaw || "",
+          telegramInitData: tg?.initDataRaw || webAppData || "",
+          tgWebAppData: webAppData || "",
         }),
       })
         .then(async (r) => {
@@ -293,12 +315,21 @@ export default function DepositMethod() {
 
     try {
       setAutoVerifying(true);
+      const tg = readTelegramIdentity();
+      const webAppData = getTelegramWebAppDataFromUrl();
       const resp = await fetch(`${apiBaseUrl}/api/deposits/shamcash/verify`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(tg?.id ? { "x-telegram-id": tg.id } : {}),
+          ...(tg?.initDataRaw || webAppData ? { "x-telegram-init-data": tg?.initDataRaw || webAppData } : {}),
+        },
         body: JSON.stringify({
           invoiceId: autoInvoice.invoiceId,
           transactionRef,
+          telegramId: tg?.id || "",
+          telegramInitData: tg?.initDataRaw || webAppData || "",
+          tgWebAppData: webAppData || "",
         }),
       });
       const payload: any = await resp.json().catch(() => ({}));

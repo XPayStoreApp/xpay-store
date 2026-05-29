@@ -58,7 +58,13 @@ function readTelegramHeaders(): Record<string, string> {
       const hashRaw = String(globalThis?.location?.hash || "").replace(/^#/, "");
       const hash = new URLSearchParams(hashRaw);
       const webAppData = search.get("tgWebAppData") || hash.get("tgWebAppData");
-      return String(webAppData || "").trim();
+      const raw = String(webAppData || "").trim();
+      if (!raw) return "";
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
     } catch {
       return "";
     }
@@ -72,7 +78,14 @@ function readTelegramHeaders(): Record<string, string> {
       const webAppData = search.get("tgWebAppData") || hash.get("tgWebAppData");
       if (!webAppData) return null;
 
-      const init = new URLSearchParams(webAppData);
+      let initDataRaw = String(webAppData || "").trim();
+      try {
+        initDataRaw = decodeURIComponent(initDataRaw);
+      } catch {
+        // keep the original value
+      }
+
+      const init = new URLSearchParams(initDataRaw);
       const userRaw = init.get("user");
       if (!userRaw) return null;
       const user = JSON.parse(userRaw);
@@ -82,6 +95,7 @@ function readTelegramHeaders(): Record<string, string> {
         username: String(user.username || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "TelegramUser"),
         firstName: String(user.first_name || ""),
         lastName: String(user.last_name || ""),
+        initDataRaw,
       };
     } catch {
       return null;

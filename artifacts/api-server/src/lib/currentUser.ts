@@ -71,10 +71,12 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
   const initDataRaw = hdr["x-telegram-init-data"] as string | undefined;
   const queryTgWebAppData = req?.query?.["tgWebAppData"] as string | undefined;
   const bodyInitData = (req as any)?.body?.telegramInitData as string | undefined;
+  const bodyTgWebAppData = (req as any)?.body?.tgWebAppData as string | undefined;
   const parsedFromInitData =
     tryParseIdentityFromAnyRaw(initDataRaw) ||
     tryParseIdentityFromAnyRaw(queryTgWebAppData) ||
-    tryParseIdentityFromAnyRaw(bodyInitData);
+    tryParseIdentityFromAnyRaw(bodyInitData) ||
+    tryParseIdentityFromAnyRaw(bodyTgWebAppData);
   if (parsedFromInitData?.telegramId) return parsedFromInitData;
 
   const tgIdRaw =

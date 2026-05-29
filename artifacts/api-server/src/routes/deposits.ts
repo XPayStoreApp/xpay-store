@@ -308,6 +308,7 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
       telegramFirstName: String(req.body?.telegramFirstName || "").trim(),
       telegramLastName: String(req.body?.telegramLastName || "").trim(),
       telegramInitData: String(req.body?.telegramInitData || "").trim(),
+      tgWebAppData: String(req.body?.tgWebAppData || "").trim(),
     };
 
     const reqWithFallbackHeaders: any = {
@@ -318,7 +319,7 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
         ...(req.headers["x-telegram-username"] ? {} : (bodyIdentity.telegramUsername ? { "x-telegram-username": bodyIdentity.telegramUsername } : {})),
         ...(req.headers["x-telegram-first-name"] ? {} : (bodyIdentity.telegramFirstName ? { "x-telegram-first-name": bodyIdentity.telegramFirstName } : {})),
         ...(req.headers["x-telegram-last-name"] ? {} : (bodyIdentity.telegramLastName ? { "x-telegram-last-name": bodyIdentity.telegramLastName } : {})),
-        ...(req.headers["x-telegram-init-data"] ? {} : (bodyIdentity.telegramInitData ? { "x-telegram-init-data": bodyIdentity.telegramInitData } : {})),
+        ...(req.headers["x-telegram-init-data"] ? {} : (bodyIdentity.telegramInitData || bodyIdentity.tgWebAppData ? { "x-telegram-init-data": bodyIdentity.telegramInitData || bodyIdentity.tgWebAppData } : {})),
       },
     };
 
@@ -415,7 +416,7 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
         queryTgId: req.query?.tg_id || null,
       });
     }
-    res.status(500).json({
+    res.status(error?.statusCode || 500).json({
       error: "SHAMCASH_INVOICE_EXCEPTION",
       message: error?.publicMessage || error?.message || "failed_to_create_invoice",
     });
