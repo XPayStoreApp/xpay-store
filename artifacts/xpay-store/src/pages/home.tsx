@@ -38,7 +38,7 @@ export default function Home() {
                 </span>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">مرحبًا بك في</p>
+                <p className="text-xs text-muted-foreground">أهلاً بك يا</p>
                 <p className="text-sm font-bold text-foreground">
                   {profileLoading ? <Skeleton className="h-4 w-20" /> : profile?.username || "ضيف"}
                 </p>
