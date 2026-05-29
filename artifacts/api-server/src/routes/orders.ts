@@ -519,7 +519,7 @@ router.post("/orders", async (req, res) => {
         orderNumber,
         playerId,
         status: finalOrderStatus,
-        details: finalOrderStatus === "accept" ? "تمت بنجاح" : "انتظر قليلاً",
+        details: orderStatusMessage(finalOrderStatus),
       });
     } catch (error) {
       console.error("Notify order user failed:", error);
