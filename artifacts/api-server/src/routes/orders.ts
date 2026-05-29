@@ -19,6 +19,46 @@ class ValidationError extends Error {
   statusCode = 400;
 }
 
+const USD_SCALE = 12;
+const USD_FACTOR = 10n ** BigInt(USD_SCALE);
+
+function decimalToScaledBigInt(value: unknown, scale = USD_SCALE): bigint {
+  const raw = String(value ?? "0").trim();
+  if (!/^-?\d+(\.\d+)?$/.test(raw)) {
+    throw new ValidationError("قيمة السعر غير صالحة");
+  }
+
+  const negative = raw.startsWith("-");
+  const unsigned = negative ? raw.slice(1) : raw;
+  const [wholePart, fractionPart = ""] = unsigned.split(".");
+  const fraction = fractionPart.padEnd(scale, "0").slice(0, scale);
+  const scaled = BigInt(wholePart || "0") * (10n ** BigInt(scale)) + BigInt(fraction || "0");
+  return negative ? -scaled : scaled;
+}
+
+function scaledBigIntToDecimalString(value: bigint, scale = USD_SCALE): string {
+  const negative = value < 0n;
+  const abs = negative ? -value : value;
+  const factor = 10n ** BigInt(scale);
+  const whole = abs / factor;
+  const fraction = (abs % factor).toString().padStart(scale, "0").replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole.toString()}${fraction ? `.${fraction}` : ""}`;
+}
+
+function addDecimalStrings(a: unknown, b: unknown): string {
+  return scaledBigIntToDecimalString(decimalToScaledBigInt(a) + decimalToScaledBigInt(b));
+}
+
+function multiplyDecimalByQuantity(unitPrice: unknown, quantity: unknown): string {
+  const priceScaled = decimalToScaledBigInt(unitPrice);
+  const quantityScaled = decimalToScaledBigInt(quantity);
+  return scaledBigIntToDecimalString((priceScaled * quantityScaled) / USD_FACTOR);
+}
+
+function decimalGte(a: unknown, b: unknown): boolean {
+  return decimalToScaledBigInt(a) >= decimalToScaledBigInt(b);
+}
+
 function normalizeProviderOrderStatus(status: string | null | undefined): "wait" | "accept" | "reject" {
   const normalized = String(status || "").trim().toLowerCase();
   if (["accept", "accepted", "ok", "success", "completed", "paid", "done"].includes(normalized)) {
@@ -33,7 +73,7 @@ function normalizeProviderOrderStatus(status: string | null | undefined): "wait"
 async function refundRejectedOrderIfNeeded(args: {
   orderId: number;
   userId: number;
-  totalUsd: number;
+  totalUsd: string | number;
   meta: any;
 }): Promise<any> {
   if (args.meta?.refund?.refundedAt) return args.meta;
@@ -50,7 +90,7 @@ async function refundRejectedOrderIfNeeded(args: {
     refund: {
       refunded: true,
       refundedAt: new Date().toISOString(),
-      amountUsd: args.totalUsd,
+      amountUsd: String(args.totalUsd),
     },
   };
 
@@ -110,7 +150,7 @@ async function syncPendingProviderOrdersForUser(userId: number): Promise<void> {
         nextMeta = await refundRejectedOrderIfNeeded({
           orderId: order.id,
           userId: user.id,
-          totalUsd: Number(order.totalUsd),
+          totalUsd: String(order.totalUsd),
           meta: nextMeta,
         });
       }
@@ -244,7 +284,7 @@ router.post("/orders", async (req, res) => {
 
     let providerForOrder: typeof providersTable.$inferSelect | null = null;
     let adapterForOrder: ReturnType<typeof getAdapter> | null = null;
-    let liveProviderUnitPrice = 0;
+    let liveProviderUnitPrice: string | null = null;
     let providerAvailable: boolean | null = null;
 
     if (product.providerId) {
@@ -273,7 +313,7 @@ router.post("/orders", async (req, res) => {
         const providerProduct = providerProducts.find((p) => String(p.id) === String((product as any).providerProductId || ""));
 
         if (providerProduct) {
-          liveProviderUnitPrice = Number(providerProduct.price || 0);
+          liveProviderUnitPrice = String(providerProduct.price || "0");
           providerAvailable = !!providerProduct.available;
 
           if (providerProduct.minQty != null && body.quantity < Number(providerProduct.minQty)) {
@@ -291,20 +331,22 @@ router.post("/orders", async (req, res) => {
       }
     }
 
-    const dashboardMarkupUsd = Number(product.priceUsd);
-    const storedBaseCostUsd = product.basePriceUsd != null ? Number(product.basePriceUsd) : 0;
-    const providerUnitPriceUsd = product.providerId ? liveProviderUnitPrice || storedBaseCostUsd : 0;
-    const finalUnitPriceUsd = product.providerId ? providerUnitPriceUsd + dashboardMarkupUsd : dashboardMarkupUsd;
-    const totalUsd = finalUnitPriceUsd * body.quantity;
+    const dashboardMarkupUsd = String(product.priceUsd);
+    const storedBaseCostUsd = product.basePriceUsd != null ? String(product.basePriceUsd) : "0";
+    const providerUnitPriceUsd = product.providerId ? liveProviderUnitPrice || storedBaseCostUsd : "0";
+    const finalUnitPriceUsd = product.providerId
+      ? addDecimalStrings(providerUnitPriceUsd, dashboardMarkupUsd)
+      : dashboardMarkupUsd;
+    const totalUsd = multiplyDecimalByQuantity(finalUnitPriceUsd, body.quantity);
     const totalSyp = Number(product.priceSyp) * body.quantity;
-    const balanceBeforeUsd = Number(user.balanceUsd);
+    const balanceBeforeUsd = String(user.balanceUsd);
 
-    if (!Number.isFinite(totalUsd) || totalUsd <= 0) {
+    if (decimalToScaledBigInt(totalUsd) <= 0n) {
       res.status(400).json({ error: "سعر الطلب غير صالح" });
       return;
     }
 
-    if (balanceBeforeUsd < totalUsd) {
+    if (!decimalGte(balanceBeforeUsd, totalUsd)) {
       res.status(400).json({ error: "رصيدك غير كافٍ لإتمام الطلب" });
       return;
     }
@@ -369,7 +411,7 @@ router.post("/orders", async (req, res) => {
           productId: product.id,
           quantity: String(body.quantity),
           userIdentifier: body.userIdentifier ?? null,
-          totalUsd: String(totalUsd),
+          totalUsd,
           totalSyp: String(totalSyp),
           status: finalOrderStatus,
           meta,
@@ -389,15 +431,16 @@ router.post("/orders", async (req, res) => {
       });
     }
 
-    const balanceAfterUsd = finalOrderStatus === "reject" ? balanceBeforeUsd : balanceBeforeUsd - totalUsd;
+    const balanceAfterUsd =
+      finalOrderStatus === "reject" ? balanceBeforeUsd : addDecimalStrings(balanceBeforeUsd, `-${totalUsd}`);
 
     try {
       await notifyUserOrderCreated({
         telegramId: user.telegramId,
         productName: product.name,
-        priceUsd: totalUsd,
-        balanceBefore: balanceBeforeUsd,
-        balanceAfter: balanceAfterUsd,
+        priceUsd: Number(totalUsd),
+        balanceBefore: Number(balanceBeforeUsd),
+        balanceAfter: Number(balanceAfterUsd),
         orderNumber,
         playerId,
         status: finalOrderStatus,

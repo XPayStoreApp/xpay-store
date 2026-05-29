@@ -630,6 +630,12 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
     }
     if (isBlank(normalized.priceUsd)) throw new ValidationError("priceUsd is required");
     if (isBlank(normalized.priceSyp)) throw new ValidationError("priceSyp is required");
+    if (String(normalized.priceUsd).startsWith("-")) {
+      throw new ValidationError("priceUsd must be zero or a positive decimal");
+    }
+    if (normalized.basePriceUsd != null && String(normalized.basePriceUsd).startsWith("-")) {
+      throw new ValidationError("basePriceUsd must be zero or a positive decimal");
+    }
 
     if (normalized.minQty != null && normalized.maxQty != null && normalized.minQty > normalized.maxQty) {
       throw new ValidationError("minQty must be less than or equal to maxQty");

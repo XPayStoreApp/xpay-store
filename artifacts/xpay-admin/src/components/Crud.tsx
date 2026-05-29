@@ -14,6 +14,7 @@ export interface FieldDef {
   default?: any;
   step?: string;
   placeholder?: string;
+  helperText?: string;
 }
 
 export interface CrudConfig {
@@ -29,7 +30,6 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // حالة التحديد المتعدد
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -38,7 +38,7 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
     try {
       const data = await get(`/${resource}`);
       setItems(Array.isArray(data) ? data : data.items || []);
-      setSelectedIds(new Set()); // إعادة تعيين التحديد بعد التحميل
+      setSelectedIds(new Set());
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -71,7 +71,6 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
     }
   };
 
-  // تحديد/إلغاء تحديد صف واحد
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
@@ -81,7 +80,6 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
     });
   };
 
-  // تحديد الكل/إلغاء الكل
   const toggleAll = () => {
     if (selectedIds.size === items.length) {
       setSelectedIds(new Set());
@@ -90,7 +88,6 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
     }
   };
 
-  // حذف جماعي
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
     if (!confirm(`هل أنت متأكد من حذف ${selectedIds.size} عنصر؟`)) return;
@@ -137,9 +134,7 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
         </div>
       </div>
 
-      {error && (
-        <div className="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm">{error}</div>
-      )}
+      {error && <div className="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm">{error}</div>}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -234,7 +229,7 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
 }
 
 function CellValue({ field, value }: { field: FieldDef; value: any }) {
-  if (value === null || value === undefined) return <span className="text-slate-300">—</span>;
+  if (value === null || value === undefined) return <span className="text-slate-300">-</span>;
   if (field.type === "boolean") {
     return value ? (
       <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2 py-0.5 rounded">نعم</span>
@@ -246,7 +241,7 @@ function CellValue({ field, value }: { field: FieldDef; value: any }) {
     return value ? (
       <img src={value} alt="" className="w-10 h-10 rounded object-cover" />
     ) : (
-      <span className="text-slate-300">—</span>
+      <span className="text-slate-300">-</span>
     );
   }
   if (field.type === "select" && field.options) {
@@ -260,7 +255,11 @@ function CellValue({ field, value }: { field: FieldDef; value: any }) {
 }
 
 export function FormModal({
-  title, fields, initial, onClose, onSave,
+  title,
+  fields,
+  initial,
+  onClose,
+  onSave,
 }: {
   title: string;
   fields: FieldDef[];
@@ -305,6 +304,7 @@ export function FormModal({
                 value={data[f.name]}
                 onChange={(v) => setData({ ...data, [f.name]: v })}
               />
+              {f.helperText && <p className="mt-1 text-xs leading-5 text-slate-500">{f.helperText}</p>}
             </div>
           ))}
           {err && <div className="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm">{err}</div>}
@@ -331,7 +331,9 @@ export function FormModal({
 }
 
 function FieldInput({
-  field, value, onChange,
+  field,
+  value,
+  onChange,
 }: {
   field: FieldDef;
   value: any;
@@ -371,7 +373,7 @@ function FieldInput({
         onChange={(e) => onChange(e.target.value)}
         required={field.required}
       >
-        <option value="">— اختر —</option>
+        <option value="">- اختر -</option>
         {field.options?.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
