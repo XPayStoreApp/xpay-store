@@ -77,7 +77,7 @@ export default function Deposit() {
   return (
     <div className="min-h-screen bg-background pb-24 p-4 animate-in fade-in duration-300">
       <div className="mb-6 mt-4 text-center">
-        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-primary/20 shadow-[0_0_30px_rgba(0,255,255,0.15)]">
+        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-primary/20 shadow-[0_0_30px_hsl(var(--primary)/0.18)]">
           <Wallet className="w-8 h-8 text-primary" />
         </div>
         <h1 className="text-2xl font-black text-foreground mb-2">اختر وسيلة الشحن</h1>

@@ -38,10 +38,15 @@ router.get("/theme", async (_req, res) => {
   const rows = await db.select().from(settingsTable);
   const map = new Map(rows.map((row) => [row.key, row.value]));
 
+  const normalizeThemeColor = (key: string, fallback: string, legacyValues: string[] = []) => {
+    const value = String(map.get(key) || fallback).trim();
+    return legacyValues.includes(value.toLowerCase()) ? fallback : value;
+  };
+
   res.json({
-    primary: String(map.get("theme_primary") || "#0052CC"),
-    accent: String(map.get("theme_accent") || "#F97316"),
-    background: String(map.get("theme_bg") || "#0A1628"),
+    primary: normalizeThemeColor("theme_primary", "#58E8FF", ["#0052cc"]),
+    accent: normalizeThemeColor("theme_accent", "#D94CFF", ["#f97316"]),
+    background: normalizeThemeColor("theme_bg", "#07091B", ["#0a1628"]),
     font: String(map.get("theme_font") || "Cairo"),
     radius: String(map.get("theme_radius") || "16"),
   });

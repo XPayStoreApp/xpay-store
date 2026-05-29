@@ -3,9 +3,9 @@ import { get, put } from "../lib/api";
 import { Save, Palette } from "lucide-react";
 
 const FIELDS = [
-  { key: "theme_primary", label: "اللون الرئيسي", type: "color", default: "#0052CC" },
-  { key: "theme_accent", label: "اللون الثانوي", type: "color", default: "#F97316" },
-  { key: "theme_bg", label: "خلفية المتجر", type: "color", default: "#0A1628" },
+  { key: "theme_primary", label: "اللون الرئيسي", type: "color", default: "#58E8FF" },
+  { key: "theme_accent", label: "اللون الثانوي", type: "color", default: "#D94CFF" },
+  { key: "theme_bg", label: "خلفية المتجر", type: "color", default: "#07091B" },
   { key: "theme_font", label: "الخط", type: "text", default: "Cairo" },
   { key: "theme_radius", label: "نصف القطر (px)", type: "number", default: "12" },
 ];

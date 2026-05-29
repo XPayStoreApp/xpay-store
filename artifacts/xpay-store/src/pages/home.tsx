@@ -62,7 +62,7 @@ export default function Home() {
             </Link>
           </div>
 
-          <Card className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 border-white/10 shadow-xl overflow-hidden relative">
+          <Card className="xpay-brand-card shadow-xl overflow-hidden relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
             <CardContent className="p-6 relative z-10">
               <div className="flex justify-between items-start">

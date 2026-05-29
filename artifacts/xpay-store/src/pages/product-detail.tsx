@@ -159,7 +159,7 @@ export default function ProductDetail() {
         {product.image ? (
           <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary/30 to-cyan-600/30 flex items-center justify-center">
+          <div className="w-full h-full xpay-brand-card flex items-center justify-center">
             <ShoppingCart className="w-16 h-16 text-primary/50" />
           </div>
         )}

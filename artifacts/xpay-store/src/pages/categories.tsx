@@ -64,7 +64,7 @@ export default function Categories() {
                     {product.image ? (
                       <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center">
+                      <div className="w-full h-full xpay-brand-card flex items-center justify-center">
                         <PackageOpen className="w-8 h-8 text-primary/40" />
                       </div>
                     )}

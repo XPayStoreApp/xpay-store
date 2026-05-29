@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -24,6 +24,14 @@ type StoreTheme = {
   background: string;
   font: string;
   radius: string;
+};
+
+const XPAY_BRAND_THEME: StoreTheme = {
+  primary: "#58E8FF",
+  accent: "#D94CFF",
+  background: "#07091B",
+  font: "Cairo",
+  radius: "16",
 };
 
 function hexToHslString(hex: string, fallback: string): string {
@@ -93,9 +101,9 @@ function clampMaxLightness(hsl: string, maxL: number): string {
 
 function applyTheme(theme: StoreTheme) {
   const root = document.documentElement;
-  const primary = hexToHslString(theme.primary, "185 100% 50%");
-  const accent = hexToHslString(theme.accent, "24 95% 53%");
-  const backgroundRaw = hexToHslString(theme.background, "215 60% 10%");
+  const primary = hexToHslString(theme.primary, "188 100% 67%");
+  const accent = hexToHslString(theme.accent, "291 100% 65%");
+  const backgroundRaw = hexToHslString(theme.background, "236 57% 7%");
   const background = clampMaxLightness(backgroundRaw, 18);
   const radiusValue = Number(theme.radius);
   const radius = Number.isFinite(radiusValue) && radiusValue > 0 ? `${radiusValue}px` : "16px";
@@ -119,6 +127,28 @@ function applyTheme(theme: StoreTheme) {
   root.style.setProperty("--app-font-sans", `'${font}', sans-serif`);
 }
 
+function normalizeRemoteTheme(theme: Partial<StoreTheme> | null | undefined): StoreTheme {
+  const legacyColors = new Set(["#0052cc", "#f97316", "#0a1628"]);
+  const remotePrimary = String(theme?.primary || "").trim();
+  const remoteAccent = String(theme?.accent || "").trim();
+  const remoteBackground = String(theme?.background || "").trim();
+
+  const hasLegacyTheme =
+    legacyColors.has(remotePrimary.toLowerCase()) ||
+    legacyColors.has(remoteAccent.toLowerCase()) ||
+    legacyColors.has(remoteBackground.toLowerCase());
+
+  if (hasLegacyTheme) return XPAY_BRAND_THEME;
+
+  return {
+    ...XPAY_BRAND_THEME,
+    ...theme,
+    primary: remotePrimary || XPAY_BRAND_THEME.primary,
+    accent: remoteAccent || XPAY_BRAND_THEME.accent,
+    background: remoteBackground || XPAY_BRAND_THEME.background,
+  };
+}
+
 function Router() {
   return (
     <AppLayout>
@@ -140,7 +170,9 @@ function Router() {
 }
 
 function App() {
-  useEffect(() => {
+  useLayoutEffect(() => {
+    applyTheme(XPAY_BRAND_THEME);
+
     const baseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
     const themeUrl = `${baseUrl}/api/theme`;
 
@@ -149,7 +181,7 @@ function App() {
         if (!res.ok) throw new Error(`theme_http_${res.status}`);
         return res.json() as Promise<StoreTheme>;
       })
-      .then((theme) => applyTheme(theme))
+      .then((theme) => applyTheme(normalizeRemoteTheme(theme)))
       .catch((error) => {
         console.error("Theme load failed:", error);
       });

@@ -391,10 +391,10 @@ export default function DepositMethod() {
       </div>
 
       <div className="p-4 space-y-6 mt-2">
-        <div className="p-6 rounded-3xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/10 via-blue-500/10 to-indigo-500/10 shadow-lg">
+        <div className="p-6 rounded-3xl xpay-brand-card border shadow-lg">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-black text-xl text-cyan-300">{getMethodSubtitle(method)}</h2>
-            <div className="text-xs px-2 py-1 rounded-full bg-cyan-500/20 text-cyan-200">XPay</div>
+            <h2 className="font-black text-xl text-primary">{getMethodSubtitle(method)}</h2>
+            <div className="text-xs px-2 py-1 rounded-full bg-primary/15 text-primary">XPay</div>
           </div>
 
           {method.instructions && (
@@ -408,7 +408,7 @@ export default function DepositMethod() {
                 <div className="font-mono text-sm font-bold truncate select-all">{method.walletAddress}</div>
                 <button
                   onClick={() => copyToClipboard(method.walletAddress!)}
-                  className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-cyan-500/20 text-cyan-300"
+                  className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-primary/15 text-primary"
                 >
                   <Copy className="w-4 h-4" />
                 </button>
@@ -546,7 +546,7 @@ export default function DepositMethod() {
                 <Button
                   type="submit"
                   disabled={createDeposit.isPending || autoLoading}
-                  className="w-full h-14 rounded-2xl text-base font-bold text-white shadow-lg bg-cyan-600 hover:bg-cyan-500"
+                  className="w-full h-14 rounded-2xl text-base font-bold text-primary-foreground shadow-lg bg-primary hover:bg-primary/90"
                 >
                   {method.code === "sham_cash_auto"
                     ? (autoLoading ? "جاري إنشاء الفاتورة..." : "إنشاء/تحديث الفاتورة")
@@ -557,7 +557,7 @@ export default function DepositMethod() {
           </Form>
 
           {isShamCashAuto && autoInvoice ? (
-            <div className="mt-5 space-y-3 rounded-2xl border border-cyan-500/20 bg-background/70 p-4">
+            <div className="mt-5 space-y-3 rounded-2xl border border-primary/20 bg-background/70 p-4">
               <div className="text-sm font-semibold">رقم العملية (Invoice ID): <span className="font-mono">{autoInvoice.invoiceId}</span></div>
               <div className="text-xs text-muted-foreground">
                 {autoInvoice.expiresAt

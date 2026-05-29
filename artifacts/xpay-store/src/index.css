@@ -187,6 +187,29 @@
   }
 }
 
+.xpay-shell {
+  background:
+    radial-gradient(circle at 15% 8%, hsl(var(--accent) / 0.24), transparent 34%),
+    radial-gradient(circle at 88% 18%, hsl(var(--primary) / 0.24), transparent 32%),
+    radial-gradient(circle at 50% 100%, hsl(var(--primary) / 0.10), transparent 42%),
+    linear-gradient(180deg, #07091b 0%, #0b1028 48%, #07091b 100%);
+}
+
+.xpay-app-frame {
+  background:
+    linear-gradient(180deg, hsl(var(--background) / 0.92), hsl(var(--background) / 0.98)),
+    radial-gradient(circle at 15% 4%, hsl(var(--accent) / 0.18), transparent 30%),
+    radial-gradient(circle at 90% 12%, hsl(var(--primary) / 0.16), transparent 28%);
+}
+
+.xpay-brand-card {
+  background:
+    radial-gradient(circle at 12% 0%, hsl(var(--accent) / 0.26), transparent 34%),
+    radial-gradient(circle at 90% 10%, hsl(var(--primary) / 0.22), transparent 34%),
+    linear-gradient(135deg, hsl(var(--card) / 0.92), hsl(var(--secondary) / 0.92));
+  border-color: hsl(var(--primary) / 0.18);
+}
+
 /* Home - subtle shooting star background */
 @keyframes shooting-star {
   0% {
