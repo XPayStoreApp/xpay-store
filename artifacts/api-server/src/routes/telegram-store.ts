@@ -8,15 +8,21 @@ const STORE_BOT_TOKEN = process.env.TELEGRAM_STORE_BOT_TOKEN || "";
 const STORE_WEBHOOK_SECRET = process.env.TELEGRAM_STORE_WEBHOOK_SECRET || "";
 const MINI_APP_URL = process.env.TELEGRAM_MINI_APP_URL || "";
 const SUPPORT_URL = (process.env.TELEGRAM_SUPPORT_URL || "https://t.me/XPaySupportStore").replace("@", "");
+const STORE_OWNER_TELEGRAM_ID = "8559379666";
 
 async function telegramApi(method: string, body: Record<string, unknown>) {
   if (!STORE_BOT_TOKEN) return;
   const url = `https://api.telegram.org/bot${STORE_BOT_TOKEN}/${method}`;
-  await fetch(url, {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => "");
+    throw new Error(`Telegram ${method} failed: ${response.status} ${details}`);
+  }
 }
 
 function buildOpenStoreMarkup() {
@@ -101,6 +107,80 @@ async function sendAccountInfo(chatId: string | number, telegramUser: any) {
   });
 }
 
+function parseBroadcastMessage(rawText: string): string | null {
+  const text = String(rawText || "").trim();
+  const lower = text.toLowerCase();
+
+  if (lower.startsWith("/broadcast ")) return text.slice("/broadcast ".length).trim();
+  if (lower === "/broadcast") return "";
+  if (text.startsWith("نشر ")) return text.slice("نشر ".length).trim();
+  if (text === "نشر") return "";
+
+  return null;
+}
+
+async function broadcastToStoreUsers(chatId: string | number, telegramUser: any, message: string) {
+  const senderId = String(telegramUser?.id || "").trim();
+
+  if (senderId !== STORE_OWNER_TELEGRAM_ID) {
+    await telegramApi("sendMessage", {
+      chat_id: chatId,
+      text: "هذا الأمر متاح فقط لمالك البوت.",
+    });
+    return;
+  }
+
+  if (!message.trim()) {
+    await telegramApi("sendMessage", {
+      chat_id: chatId,
+      text:
+        `اكتب الرسالة بعد الأمر مباشرة.\n\n` +
+        `مثال:\n` +
+        `/broadcast يوجد تخفيض جديد اليوم على قسم التطبيقات.`,
+    });
+    return;
+  }
+
+  const users = await db
+    .select({ telegramId: usersTable.telegramId })
+    .from(usersTable);
+
+  const uniqueTelegramIds = Array.from(
+    new Set(
+      users
+        .map((user) => String(user.telegramId || "").trim())
+        .filter((telegramId) => telegramId && telegramId !== "0"),
+    ),
+  );
+
+  let sent = 0;
+  let failed = 0;
+  const broadcastText = `📢 إعلان من XPayStore\n\n${message.trim()}`;
+
+  for (const telegramId of uniqueTelegramIds) {
+    try {
+      await telegramApi("sendMessage", {
+        chat_id: telegramId,
+        text: broadcastText,
+        reply_markup: buildOpenStoreMarkup(),
+      });
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      console.error(`Broadcast to ${telegramId} failed:`, error);
+    }
+  }
+
+  await telegramApi("sendMessage", {
+    chat_id: chatId,
+    text:
+      `✅ تم تنفيذ الإرسال الجماعي.\n\n` +
+      `👥 إجمالي المستخدمين: ${uniqueTelegramIds.length}\n` +
+      `📨 تم الإرسال: ${sent}\n` +
+      `⚠️ فشل الإرسال: ${failed}`,
+  });
+}
+
 router.post("/telegram/store/webhook", async (req, res) => {
   if (STORE_WEBHOOK_SECRET) {
     const secret = req.headers["x-telegram-bot-api-secret-token"];
@@ -113,7 +193,8 @@ router.post("/telegram/store/webhook", async (req, res) => {
   const msg = req.body?.message;
   const chatId = msg?.chat?.id;
   const telegramUser = msg?.from || msg?.chat || {};
-  const text = String(msg?.text || "").trim().toLowerCase();
+  const rawText = String(msg?.text || "").trim();
+  const text = rawText.toLowerCase();
 
   if (!chatId) {
     res.json({ ok: true });
@@ -124,6 +205,13 @@ router.post("/telegram/store/webhook", async (req, res) => {
   const isProducts = text.includes("المنتجات") || text.includes("products");
   const isAccountInfo = text.includes("معلومات الحساب") || text.includes("حساب المستخدم") || text.includes("account");
   const isSupport = text.includes("تواصل") || text.includes("الدعم") || text.includes("support");
+  const broadcastMessage = parseBroadcastMessage(rawText);
+
+  if (broadcastMessage !== null) {
+    await broadcastToStoreUsers(chatId, telegramUser, broadcastMessage);
+    res.json({ ok: true });
+    return;
+  }
 
   if (isAccountInfo) {
     await sendAccountInfo(chatId, telegramUser);
