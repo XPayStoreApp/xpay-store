@@ -106,6 +106,41 @@ export default function Home() {
           </div>
         )}
 
+        <div className="px-4 mb-6">
+          <div className="xpay-brand-preview">
+            <div className="relative z-10 space-y-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="xpay-brand-logo"><span>X</span>PayStore</div>
+                  <p className="mt-2 text-sm text-[var(--xpay-muted)]">عينة توزيع ألوان الهوية الجديدة</p>
+                </div>
+                <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs text-cyan-100">
+                  Preview
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  ["#07091B", "ليل"],
+                  ["#151F49", "لوحة"],
+                  ["#D94CFF", "بنفسجي"],
+                  ["#58E8FF", "سماوي"],
+                ].map(([color, label]) => (
+                  <div key={color} className="xpay-brand-card p-2">
+                    <div className="h-9 rounded-xl border border-white/10" style={{ backgroundColor: color }} />
+                    <div className="mt-2 text-[10px] text-[var(--xpay-muted)]">{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button className="xpay-brand-button rounded-2xl py-3 text-sm font-black">زر أساسي</button>
+                <button className="xpay-brand-button-alt rounded-2xl py-3 text-sm font-black">زر ثانوي</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="px-4 mb-8">
           {bannersLoading ? (
             <Skeleton className="w-full h-40 rounded-2xl" />

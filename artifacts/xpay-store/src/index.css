@@ -248,3 +248,75 @@
   animation-duration: 7.4s;
   animation-delay: 4s;
 }
+
+/* XPay brand palette preview based on the supplied reference image */
+.xpay-brand-preview {
+  --xpay-night: #07091b;
+  --xpay-deep: #111a3c;
+  --xpay-panel: #151f49;
+  --xpay-violet: #d94cff;
+  --xpay-cyan: #58e8ff;
+  --xpay-blue: #3a88ff;
+  --xpay-ice: #e8fbff;
+  --xpay-muted: #9bb7d4;
+
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(88, 232, 255, 0.22);
+  border-radius: 28px;
+  padding: 22px;
+  color: var(--xpay-ice);
+  background:
+    radial-gradient(circle at 18% 8%, rgba(217, 76, 255, 0.32), transparent 28%),
+    radial-gradient(circle at 88% 72%, rgba(88, 232, 255, 0.34), transparent 26%),
+    radial-gradient(circle at 62% 32%, rgba(58, 136, 255, 0.18), transparent 32%),
+    linear-gradient(145deg, var(--xpay-night), var(--xpay-deep) 58%, #080b1d);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42), inset 0 0 42px rgba(88, 232, 255, 0.08);
+}
+
+.xpay-brand-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(88, 232, 255, 0.12), transparent),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 80px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.xpay-brand-logo {
+  position: relative;
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0;
+  color: var(--xpay-ice);
+  text-shadow: 0 0 24px rgba(88, 232, 255, 0.32);
+}
+
+.xpay-brand-logo span {
+  color: var(--xpay-violet);
+  text-shadow: 0 0 24px rgba(217, 76, 255, 0.7);
+}
+
+.xpay-brand-card {
+  position: relative;
+  border: 1px solid rgba(155, 183, 212, 0.16);
+  border-radius: 18px;
+  background: rgba(10, 15, 38, 0.72);
+  backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.xpay-brand-button {
+  color: #06101f;
+  background: linear-gradient(135deg, var(--xpay-cyan), var(--xpay-blue));
+  box-shadow: 0 14px 34px rgba(58, 136, 255, 0.34);
+}
+
+.xpay-brand-button-alt {
+  color: var(--xpay-ice);
+  background: linear-gradient(135deg, rgba(217, 76, 255, 0.9), rgba(58, 136, 255, 0.76));
+  box-shadow: 0 14px 34px rgba(217, 76, 255, 0.25);
+}
