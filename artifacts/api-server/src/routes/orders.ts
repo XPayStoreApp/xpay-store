@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, productsTable, providersTable, usersTable } from "@workspace/db";
-import { and, desc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { db, ordersTable, productsTable, providersTable, usersTable } from "@workspace/db";
 import {
   CreateOrderBody,
   CreateOrderResponse,
@@ -9,11 +9,15 @@ import {
   GetOrdersSummaryResponse,
   ListMyOrdersResponse,
 } from "@workspace/api-zod";
-import { getOrCreateCurrentUser } from "../lib/currentUser.js";
 import { getAdapter } from "../lib/adapter-registry";
+import { getOrCreateCurrentUser } from "../lib/currentUser.js";
 import { notifyUserOrderCreated, notifyUserOrderStatusChanged } from "../lib/telegram.js";
 
 const router: IRouter = Router();
+
+class ValidationError extends Error {
+  statusCode = 400;
+}
 
 function normalizeProviderOrderStatus(status: string | null | undefined): "wait" | "accept" | "reject" {
   const normalized = String(status || "").trim().toLowerCase();
@@ -30,7 +34,6 @@ async function refundRejectedOrderIfNeeded(args: {
   orderId: number;
   userId: number;
   totalUsd: number;
-  totalSyp: number;
   meta: any;
 }): Promise<any> {
   if (args.meta?.refund?.refundedAt) return args.meta;
@@ -39,7 +42,6 @@ async function refundRejectedOrderIfNeeded(args: {
     .update(usersTable)
     .set({
       balanceUsd: sql`${usersTable.balanceUsd} + ${String(args.totalUsd)}`,
-      balanceSyp: sql`${usersTable.balanceSyp} + ${String(args.totalSyp)}`,
     })
     .where(eq(usersTable.id, args.userId));
 
@@ -49,14 +51,10 @@ async function refundRejectedOrderIfNeeded(args: {
       refunded: true,
       refundedAt: new Date().toISOString(),
       amountUsd: args.totalUsd,
-      amountSyp: args.totalSyp,
     },
   };
 
-  await db
-    .update(ordersTable)
-    .set({ meta: nextMeta })
-    .where(eq(ordersTable.id, args.orderId));
+  await db.update(ordersTable).set({ meta: nextMeta }).where(eq(ordersTable.id, args.orderId));
 
   return nextMeta;
 }
@@ -85,16 +83,11 @@ async function syncPendingProviderOrdersForUser(userId: number): Promise<void> {
 
     if (!provider?.apiKey || !providerOrderId) continue;
 
-    const adapter = getAdapter(provider.providerType || "custom");
+    const adapter = getAdapter((provider as any).providerType || "custom");
     if (!adapter?.checkOrders) continue;
 
     try {
-      const check = await adapter.checkOrders(
-        provider.apiKey,
-        provider.apiUrl || undefined,
-        [providerOrderId],
-      );
-
+      const check = await adapter.checkOrders(provider.apiKey, provider.apiUrl || undefined, [providerOrderId]);
       const remote = check.orders.find((item) => String(item.providerOrderId) === providerOrderId);
       if (!remote) continue;
 
@@ -111,20 +104,13 @@ async function syncPendingProviderOrdersForUser(userId: number): Promise<void> {
         },
       };
 
-      await db
-        .update(ordersTable)
-        .set({
-          status: nextStatus,
-          meta: nextMeta,
-        })
-        .where(eq(ordersTable.id, order.id));
+      await db.update(ordersTable).set({ status: nextStatus, meta: nextMeta }).where(eq(ordersTable.id, order.id));
 
       if (nextStatus === "reject") {
         nextMeta = await refundRejectedOrderIfNeeded({
           orderId: order.id,
           userId: user.id,
           totalUsd: Number(order.totalUsd),
-          totalSyp: Number(order.totalSyp),
           meta: nextMeta,
         });
       }
@@ -135,7 +121,7 @@ async function syncPendingProviderOrdersForUser(userId: number): Promise<void> {
           orderNumber: order.orderNumber,
           productName: product.name,
           status: nextStatus,
-          note: nextStatus === "accept" ? "تمت العملية بنجاح." : "تم رفض الطلب من المزود.",
+          note: nextStatus === "accept" ? "تمت العملية بنجاح." : "تم رفض الطلب من المزود وإرجاع المبلغ.",
         });
       } catch (error) {
         console.error("Notify provider order status user failed:", error);
@@ -168,17 +154,19 @@ router.get("/orders", async (req, res) => {
   const status = (req.query.status as string | undefined) ?? "all";
   const conds = [eq(ordersTable.userId, user.id)];
   if (status && status !== "all") conds.push(eq(ordersTable.status, status));
+
   const rows = await db
     .select({ o: ordersTable, p: productsTable })
     .from(ordersTable)
     .leftJoin(productsTable, eq(productsTable.id, ordersTable.productId))
     .where(and(...conds))
     .orderBy(desc(ordersTable.createdAt));
+
   res.json(ListMyOrdersResponse.parse(rows.map((r) => rowToOrder(r.o, r.p))));
 });
 
-router.get("/orders/summary", async (_req, res) => {
-  const user = await getOrCreateCurrentUser(_req);
+router.get("/orders/summary", async (req, res) => {
+  const user = await getOrCreateCurrentUser(req);
   await syncPendingProviderOrdersForUser(user.id);
   const all = await db
     .select({
@@ -190,6 +178,7 @@ router.get("/orders/summary", async (_req, res) => {
     .from(ordersTable)
     .where(eq(ordersTable.userId, user.id));
   const r = all[0]!;
+
   res.json(
     GetOrdersSummaryResponse.parse({
       totalAcceptedUsd: Number(r.total),
@@ -210,213 +199,222 @@ router.get("/orders/:id", async (req, res) => {
     .leftJoin(productsTable, eq(productsTable.id, ordersTable.productId))
     .where(and(eq(ordersTable.id, id), eq(ordersTable.userId, user.id)))
     .limit(1);
+
   if (!rows.length) {
     res.status(404).json({ error: "not_found" });
     return;
   }
+
   res.json(GetOrderResponse.parse(rowToOrder(rows[0]!.o, rows[0]!.p)));
 });
 
 router.post("/orders", async (req, res) => {
-  const body = CreateOrderBody.parse(req.body);
-  const user = await getOrCreateCurrentUser(req);
+  try {
+    const body = CreateOrderBody.parse(req.body);
+    const user = await getOrCreateCurrentUser(req);
 
-  const product = (
-    await db.select().from(productsTable).where(eq(productsTable.id, Number(body.productId))).limit(1)
-  )[0];
-  if (!product) {
-    res.status(404).json({ error: "product_not_found" });
-    return;
-  }
+    const product = (
+      await db.select().from(productsTable).where(eq(productsTable.id, Number(body.productId))).limit(1)
+    )[0];
 
-  // Validate quantity against dashboard limits first.
-  if (body.quantity <= 0) {
-    res.status(400).json({ error: "الكمية يجب أن تكون أكبر من صفر" });
-    return;
-  }
-  if (product.minQty && body.quantity < Number(product.minQty)) {
-    res.status(400).json({ error: `الحد الأدنى هو ${Number(product.minQty)}` });
-    return;
-  }
-
-  let providerOrderResult: {
-    success: boolean;
-    providerOrderId?: string;
-    status?: string;
-    price?: number;
-    rawResponse?: any;
-    replayApi?: any[];
-    error?: string;
-  } | null = null;
-
-  let liveProviderUnitPrice = 0;
-  let providerAvailable: boolean | null = null;
-
-  if (product.providerId) {
-    const [provider] = await db
-      .select()
-      .from(providersTable)
-      .where(eq(providersTable.id, product.providerId))
-      .limit(1);
-
-    if (!provider) {
-      res.status(400).json({ error: "المزود غير موجود" });
+    if (!product) {
+      res.status(404).json({ error: "product_not_found" });
       return;
     }
 
-    const adapter = getAdapter(provider.providerType || "custom");
-    if (!adapter) {
-      res.status(400).json({ error: "نوع المزود غير مدعوم" });
+    if (body.quantity <= 0) {
+      res.status(400).json({ error: "الكمية يجب أن تكون أكبر من صفر" });
       return;
     }
 
-    // 1) Read live provider product details (price/availability/qty range).
-    try {
-      const providerProducts = await adapter.fetchProducts(provider.apiKey!, provider.apiUrl || undefined);
-      const providerProduct = providerProducts.find((p) => String(p.id) === String(product.providerProductId || ""));
-      if (providerProduct) {
-        liveProviderUnitPrice = Number(providerProduct.price || 0);
-        providerAvailable = !!providerProduct.available;
+    if (product.minQty && body.quantity < Number(product.minQty)) {
+      res.status(400).json({ error: `الحد الأدنى هو ${Number(product.minQty)}` });
+      return;
+    }
 
-        if (providerProduct.minQty != null && body.quantity < Number(providerProduct.minQty)) {
-          res.status(400).json({ error: `الحد الأدنى لدى المزود هو ${Number(providerProduct.minQty)}` });
-          return;
-        }
+    let providerOrderResult: {
+      success: boolean;
+      providerOrderId?: string;
+      status?: string;
+      price?: number;
+      rawResponse?: any;
+      replayApi?: any[];
+      error?: string;
+    } | null = null;
+
+    let providerForOrder: typeof providersTable.$inferSelect | null = null;
+    let adapterForOrder: ReturnType<typeof getAdapter> | null = null;
+    let liveProviderUnitPrice = 0;
+    let providerAvailable: boolean | null = null;
+
+    if (product.providerId) {
+      const [provider] = await db
+        .select()
+        .from(providersTable)
+        .where(eq(providersTable.id, product.providerId))
+        .limit(1);
+
+      if (!provider) {
+        res.status(400).json({ error: "المزود غير موجود" });
+        return;
       }
-    } catch (error) {
-      console.error("Provider live price lookup failed:", error);
+
+      const adapter = getAdapter((provider as any).providerType || "custom");
+      if (!adapter) {
+        res.status(400).json({ error: "نوع المزود غير مدعوم" });
+        return;
+      }
+
+      providerForOrder = provider;
+      adapterForOrder = adapter;
+
+      try {
+        const providerProducts = await adapter.fetchProducts(provider.apiKey!, provider.apiUrl || undefined);
+        const providerProduct = providerProducts.find((p) => String(p.id) === String((product as any).providerProductId || ""));
+
+        if (providerProduct) {
+          liveProviderUnitPrice = Number(providerProduct.price || 0);
+          providerAvailable = !!providerProduct.available;
+
+          if (providerProduct.minQty != null && body.quantity < Number(providerProduct.minQty)) {
+            res.status(400).json({ error: `الحد الأدنى لدى المزود هو ${Number(providerProduct.minQty)}` });
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("Provider live price lookup failed:", error);
+      }
+
+      if (providerAvailable === false) {
+        res.status(400).json({ error: "المنتج غير متوفر حالياً لدى المزود" });
+        return;
+      }
     }
 
-    if (providerAvailable === false) {
-      res.status(400).json({ error: "المنتج غير متوفر حاليا لدى المزود" });
+    const dashboardMarkupUsd = Number(product.priceUsd);
+    const storedBaseCostUsd = product.basePriceUsd != null ? Number(product.basePriceUsd) : 0;
+    const providerUnitPriceUsd = product.providerId ? liveProviderUnitPrice || storedBaseCostUsd : 0;
+    const finalUnitPriceUsd = product.providerId ? providerUnitPriceUsd + dashboardMarkupUsd : dashboardMarkupUsd;
+    const totalUsd = finalUnitPriceUsd * body.quantity;
+    const totalSyp = Number(product.priceSyp) * body.quantity;
+    const balanceBeforeUsd = Number(user.balanceUsd);
+
+    if (!Number.isFinite(totalUsd) || totalUsd <= 0) {
+      res.status(400).json({ error: "سعر الطلب غير صالح" });
       return;
     }
 
-    // 2) Place provider order.
-    const orderUuid = randomUUID();
+    if (balanceBeforeUsd < totalUsd) {
+      res.status(400).json({ error: "رصيدك غير كافٍ لإتمام الطلب" });
+      return;
+    }
+
+    const orderNumber = `ID_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
     const playerId = body.userIdentifier || `user_${user.id}`;
-    try {
-      providerOrderResult = await adapter.placeOrder(
-        provider.apiKey!,
-        provider.apiUrl || undefined,
-        product.providerProductId!,
-        body.quantity,
-        playerId,
-        orderUuid,
-      );
-    } catch (error: any) {
-      console.error("Provider order error:", error);
-      providerOrderResult = {
-        success: false,
-        error: error.message || "فشل الاتصال بالمزود",
+
+    if (product.providerId && providerForOrder && adapterForOrder) {
+      try {
+        providerOrderResult = await adapterForOrder.placeOrder(
+          providerForOrder.apiKey!,
+          providerForOrder.apiUrl || undefined,
+          (product as any).providerProductId!,
+          body.quantity,
+          playerId,
+          randomUUID(),
+        );
+      } catch (error: any) {
+        console.error("Provider order error:", error);
+        providerOrderResult = {
+          success: false,
+          error: error.message || "فشل الاتصال بالمزود",
+        };
+      }
+    }
+
+    const finalOrderStatus = product.providerId ? normalizeProviderOrderStatus(providerOrderResult?.status) : "accept";
+    const meta: any = {
+      pricing: {
+        providerUnitPriceUsd,
+        dashboardMarkupUsd,
+        finalUnitPriceUsd,
+      },
+    };
+
+    if (providerOrderResult) {
+      meta.provider = {
+        providerOrderId: providerOrderResult.providerOrderId,
+        status: providerOrderResult.status,
+        rawResponse: providerOrderResult.rawResponse,
+        replayApi: providerOrderResult.replayApi,
+        error: providerOrderResult.error,
       };
     }
-  }
 
-  // 3) Final price = provider live/base cost + dashboard markup.
-  // For non-provider products, keep dashboard price only.
-  const dashboardMarkupUsd = Number(product.priceUsd);
-  const storedBaseCostUsd = product.basePriceUsd != null ? Number(product.basePriceUsd) : 0;
-  const providerUnitPriceUsd =
-    product.providerId
-      ? (
-          liveProviderUnitPrice ||
-          (providerOrderResult?.price ? Number(providerOrderResult.price) / body.quantity : 0) ||
-          storedBaseCostUsd
-        )
-      : 0;
-  const finalUnitPriceUsd = product.providerId
-    ? providerUnitPriceUsd + dashboardMarkupUsd
-    : dashboardMarkupUsd;
+    const inserted = await db.transaction(async (tx) => {
+      const [updatedUser] = await tx
+        .update(usersTable)
+        .set({
+          balanceUsd: sql`${usersTable.balanceUsd} - ${String(totalUsd)}`,
+        })
+        .where(and(eq(usersTable.id, user.id), sql`${usersTable.balanceUsd} >= ${String(totalUsd)}`))
+        .returning();
 
-  const totalUsd = finalUnitPriceUsd * body.quantity;
-  const totalSyp = Number(product.priceSyp) * body.quantity;
-  const orderNumber = `ID_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+      if (!updatedUser) throw new ValidationError("رصيدك غير كافٍ لإتمام الطلب");
 
-  const balanceBeforeUsd = Number(user.balanceUsd);
-  if (balanceBeforeUsd < totalUsd) {
-    res.status(400).json({ error: "رصيدك غير كافٍ لإتمام الطلب" });
-    return;
-  }
+      return tx
+        .insert(ordersTable)
+        .values({
+          orderNumber,
+          userId: user.id,
+          productId: product.id,
+          quantity: String(body.quantity),
+          userIdentifier: body.userIdentifier ?? null,
+          totalUsd: String(totalUsd),
+          totalSyp: String(totalSyp),
+          status: finalOrderStatus,
+          meta,
+        })
+        .returning();
+    });
 
-  const finalOrderStatus = product.providerId
-    ? normalizeProviderOrderStatus(providerOrderResult?.status)
-    : "accept";
+    const o = inserted[0]!;
+    let finalMeta = meta;
 
-  const meta: any = {
-    pricing: {
-      providerUnitPriceUsd,
-      dashboardMarkupUsd,
-      finalUnitPriceUsd,
-    },
-  };
-  if (providerOrderResult) {
-    meta.provider = {
-      providerOrderId: providerOrderResult.providerOrderId,
-      status: providerOrderResult.status,
-      rawResponse: providerOrderResult.rawResponse,
-      replayApi: providerOrderResult.replayApi,
-      error: providerOrderResult.error,
-    };
-  }
-
-  const inserted = await db.transaction(async (tx) => {
-    const [updatedUser] = await tx
-      .update(usersTable)
-      .set({
-        balanceUsd: sql`${usersTable.balanceUsd} - ${String(totalUsd)}`,
-        balanceSyp: sql`${usersTable.balanceSyp} - ${String(totalSyp)}`,
-      })
-      .where(eq(usersTable.id, user.id))
-      .returning();
-    if (!updatedUser) throw new Error("user_not_found");
-
-    return tx
-      .insert(ordersTable)
-      .values({
-        orderNumber,
+    if (finalOrderStatus === "reject") {
+      finalMeta = await refundRejectedOrderIfNeeded({
+        orderId: o.id,
         userId: user.id,
-        productId: product.id,
-        quantity: String(body.quantity),
-        userIdentifier: body.userIdentifier ?? null,
-        totalUsd: String(totalUsd),
-        totalSyp: String(totalSyp),
-        status: finalOrderStatus,
+        totalUsd,
         meta,
-      })
-      .returning();
-  });
+      });
+    }
 
-  const o = inserted[0]!;
-  let finalMeta = meta;
-  if (finalOrderStatus === "reject") {
-    finalMeta = await refundRejectedOrderIfNeeded({
-      orderId: o.id,
-      userId: user.id,
-      totalUsd,
-      totalSyp,
-      meta,
-    });
-  }
-  const playerId = body.userIdentifier || `user_${user.id}`;
-  const balanceAfterUsd = finalOrderStatus === "reject" ? balanceBeforeUsd : balanceBeforeUsd - totalUsd;
-  try {
-    await notifyUserOrderCreated({
-      telegramId: user.telegramId,
-      productName: product.name,
-      priceUsd: totalUsd,
-      balanceBefore: balanceBeforeUsd,
-      balanceAfter: balanceAfterUsd,
-      orderNumber,
-      playerId,
-      status: finalOrderStatus,
-      details: finalOrderStatus === "accept" ? "تمت بنجاح" : "انتظر قليلا",
-    });
+    const balanceAfterUsd = finalOrderStatus === "reject" ? balanceBeforeUsd : balanceBeforeUsd - totalUsd;
+
+    try {
+      await notifyUserOrderCreated({
+        telegramId: user.telegramId,
+        productName: product.name,
+        priceUsd: totalUsd,
+        balanceBefore: balanceBeforeUsd,
+        balanceAfter: balanceAfterUsd,
+        orderNumber,
+        playerId,
+        status: finalOrderStatus,
+        details: finalOrderStatus === "accept" ? "تمت بنجاح" : "انتظر قليلاً",
+      });
+    } catch (error) {
+      console.error("Notify order user failed:", error);
+    }
+
+    res.json(CreateOrderResponse.parse(rowToOrder({ ...o, meta: finalMeta }, product)));
   } catch (error) {
-    console.error("Notify order user failed:", error);
+    if (error instanceof ValidationError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    throw error;
   }
-
-  res.json(CreateOrderResponse.parse(rowToOrder({ ...o, meta: finalMeta }, product)));
 });
 
 export default router;

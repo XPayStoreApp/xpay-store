@@ -6,7 +6,7 @@ export async function api<T = any>(
   opts: RequestInit = {},
 ): Promise<T> {
   const url = `${BASE}${path}`;
-  console.log(`🚀 API Request: ${opts.method || "GET"} ${url}`, opts.body || "");
+  console.log(`API Request: ${opts.method || "GET"} ${url}`, opts.body || "");
 
   const res = await fetch(url, {
     credentials: "include",
@@ -17,7 +17,7 @@ export async function api<T = any>(
     ...opts,
   });
 
-  console.log(`📥 API Response: ${res.status} ${res.statusText} for ${url}`);
+  console.log(`API Response: ${res.status} ${res.statusText} for ${url}`);
 
   const text = await res.text();
   let data: any = null;
@@ -29,11 +29,11 @@ export async function api<T = any>(
 
   if (!res.ok) {
     const msg = data?.error || data?.message || `HTTP ${res.status}`;
-    console.error(`❌ API Error: ${msg}`);
+    console.error(`API Error: ${msg}`);
     throw new Error(msg);
   }
 
-  console.log(`✅ API Success:`, data);
+  console.log("API Success:", data);
   return data as T;
 }
 

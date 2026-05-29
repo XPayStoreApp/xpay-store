@@ -83,6 +83,60 @@ function normalizeDecimalField(
   data[key] = s;
 }
 
+function parseBalanceAdjustment(body: any): {
+  currency: "USD" | "SYP";
+  operation: "add" | "sub";
+  amountText: string;
+  deltaText: string;
+  note?: string;
+} {
+  const currency = body?.currency === "SYP" ? "SYP" : "USD";
+  const note = typeof body?.note === "string" ? body.note : undefined;
+
+  let operation: "add" | "sub";
+  let amount: number;
+
+  if (body?.operation === "add" || body?.operation === "sub") {
+    operation = body.operation;
+    amount = Number(body.amount);
+  } else {
+    const delta = Number(body?.delta);
+    operation = delta < 0 ? "sub" : "add";
+    amount = Math.abs(delta);
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new ValidationError("المبلغ غير صالح");
+  }
+
+  const amountText = String(amount);
+  const deltaText = operation === "sub" ? `-${amountText}` : amountText;
+  return { currency, operation, amountText, deltaText, note };
+}
+
+async function applyUserBalanceAdjustment(userId: number, body: any) {
+  const adjustment = parseBalanceAdjustment(body);
+  const col = adjustment.currency === "SYP" ? usersTable.balanceSyp : usersTable.balanceUsd;
+  const field = adjustment.currency === "SYP" ? "balanceSyp" : "balanceUsd";
+
+  const query = db
+    .update(usersTable)
+    .set({ [field]: sql`${col} + ${adjustment.deltaText}` })
+    .where(
+      adjustment.operation === "sub"
+        ? and(eq(usersTable.id, userId), sql`${col} >= ${adjustment.amountText}`)
+        : eq(usersTable.id, userId),
+    )
+    .returning();
+
+  const [updatedUser] = await query;
+  if (!updatedUser) {
+    throw new ValidationError("الرصيد غير كافٍ لإتمام الخصم");
+  }
+
+  return { adjustment, updatedUser };
+}
+
 function findPgError(err: any): any {
   let cur = err;
   for (let i = 0; i < 6 && cur; i += 1) {
@@ -792,23 +846,23 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res) => {
 });
 
 router.post("/admin/users/:id/adjust-balance", requireAdmin, async (req, res) => {
-  const { delta, currency, note } = req.body as {
-    delta: number;
-    currency: "USD" | "SYP";
-    note?: string;
-  };
-  const col = currency === "SYP" ? usersTable.balanceSyp : usersTable.balanceUsd;
-  await db
-    .update(usersTable)
-    .set({ [currency === "SYP" ? "balanceSyp" : "balanceUsd"]: sql`${col} + ${delta}` })
-    .where(eq(usersTable.id, Number(req.params.id)));
+  let result: Awaited<ReturnType<typeof applyUserBalanceAdjustment>>;
+  try {
+    result = await applyUserBalanceAdjustment(Number(req.params.id), req.body);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
   await logActivity(
     { id: req.session.adminId, name: req.session.adminUsername },
     "adjust_balance",
     String(req.params.id),
-    { delta, currency, note },
+    result.adjustment,
   );
-  res.json({ ok: true });
+  res.json({ ok: true, user: result.updatedUser });
 });
 
 // ========== ORDERS ==========
@@ -1136,25 +1190,23 @@ router.put("/admin/profile", requireAdmin, async (req, res) => {
 
 // ========== USER BALANCE / BAN ALIASES ==========
 router.post("/admin/users/:id/balance", requireAdmin, async (req, res) => {
-  const { delta, currency, note } = req.body as {
-    delta: number;
-    currency: "USD" | "SYP";
-    note?: string;
-  };
-  const col = currency === "SYP" ? usersTable.balanceSyp : usersTable.balanceUsd;
-  await db
-    .update(usersTable)
-    .set({
-      [currency === "SYP" ? "balanceSyp" : "balanceUsd"]: sql`${col} + ${delta}`,
-    })
-    .where(eq(usersTable.id, Number(req.params.id)));
+  let result: Awaited<ReturnType<typeof applyUserBalanceAdjustment>>;
+  try {
+    result = await applyUserBalanceAdjustment(Number(req.params.id), req.body);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
   await logActivity(
     { id: req.session.adminId, name: req.session.adminUsername },
     "adjust_balance",
     String(req.params.id),
-    { delta, currency, note },
+    result.adjustment,
   );
-  res.json({ ok: true });
+  res.json({ ok: true, user: result.updatedUser });
 });
 
 router.patch("/admin/users/:id/ban", requireAdmin, async (req, res) => {
