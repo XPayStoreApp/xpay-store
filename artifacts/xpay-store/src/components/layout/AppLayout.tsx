@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+﻿import { Link, useLocation } from "wouter";
 import { Home, ListOrdered, History, HeadphonesIcon, Plus } from "lucide-react";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
