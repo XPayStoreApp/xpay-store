@@ -21,6 +21,22 @@ function getBrandedCategoryImage(categoryName: string, fallback?: string | null)
   return fallback || "/xpay-cat-apps.svg";
 }
 
+function readLocalTelegramUser() {
+  try {
+    const user = (globalThis as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (!user?.id) return null;
+    const username = String(
+      user.username || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "TelegramUser",
+    );
+    return {
+      telegramId: String(user.id),
+      username,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   const { data: profile, isLoading: profileLoading, isError: profileError } = useGetProfile();
   const { data: news, isLoading: newsLoading } = useListNews();
@@ -28,10 +44,16 @@ export default function Home() {
   const { data: categories, isLoading: categoriesLoading } = useListCategories();
 
   const [emblaRef] = useEmblaCarousel({ loop: true, direction: "rtl" }, [Autoplay({ delay: 3000 })]);
+  const localTelegramUser = readLocalTelegramUser();
   const isInsideTelegram = Boolean((globalThis as any)?.Telegram?.WebApp);
-  const displayName = profile?.username || (profileError ? "تعذر التحقق" : isInsideTelegram ? "جارٍ التحقق" : "ضيف");
-  const shortId = profile?.telegramId
-    ? (((Number(String(profile.telegramId).replace(/\D/g, "").slice(-10) || "0") % 9000) + 1000)
+  const effectiveTelegramId = profile?.telegramId || localTelegramUser?.telegramId || "";
+  const displayName =
+    (profile?.telegramId ? profile.username : "") ||
+    localTelegramUser?.username ||
+    profile?.username ||
+    (isInsideTelegram ? "Telegram User" : "ضيف");
+  const shortId = effectiveTelegramId
+    ? (((Number(String(effectiveTelegramId).replace(/\D/g, "").slice(-10) || "0") % 9000) + 1000)
         .toString()
         .padStart(4, "0"))
     : "---";
@@ -50,7 +72,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
                 <span className="text-primary font-bold text-lg">
-                  {profile?.username ? profile.username.charAt(0).toUpperCase() : "X"}
+                  {displayName ? displayName.charAt(0).toUpperCase() : "X"}
                 </span>
               </div>
               <div>
@@ -65,7 +87,7 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-muted-foreground">ID:</span>
                   <span className="text-xs font-mono font-medium text-foreground">
-                    {profileLoading ? <Skeleton className="h-4 w-16" /> : (profile?.telegramId || "---")}
+                    {profileLoading && !effectiveTelegramId ? <Skeleton className="h-4 w-16" /> : (effectiveTelegramId || "---")}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -102,9 +124,9 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          {profileError && (
+          {profileError && !localTelegramUser && (
             <div className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              تعذر تحميل هوية تيليجرام. أغلق المتجر وافتحه من زر "فتح المتجر" داخل البوت، ثم أعد المحاولة.
+              لم تصل بيانات تيليجرام إلى المتجر. اضغط /start ثم افتح المتجر من زر البوت.
             </div>
           )}
         </div>
