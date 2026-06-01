@@ -18,12 +18,37 @@ async function waitForTelegramIdentity(timeoutMs = 1500) {
   }
 }
 
+async function registerTelegramSession() {
+  const webApp = (globalThis as any)?.Telegram?.WebApp;
+  const user = webApp?.initDataUnsafe?.user;
+  if (!user?.id) return;
+
+  const apiBase = String(import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+  if (!apiBase) return;
+
+  await fetch(`${apiBase}/api/telegram/store/session`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(webApp?.initData ? { "x-telegram-init-data": String(webApp.initData) } : {}),
+      "x-telegram-id": String(user.id),
+      "x-telegram-username": String(user.username || ""),
+      "x-telegram-first-name": String(user.first_name || ""),
+      "x-telegram-last-name": String(user.last_name || ""),
+    },
+    body: JSON.stringify({ user }),
+  }).catch((error) => {
+    console.error("Telegram session registration failed:", error);
+  });
+}
+
 async function bootstrap() {
   try {
     const webApp = (globalThis as any)?.Telegram?.WebApp;
     webApp?.ready?.();
     webApp?.expand?.();
     await waitForTelegramIdentity();
+    await registerTelegramSession();
   } catch {
     // The store must still render outside Telegram for diagnostics.
   }

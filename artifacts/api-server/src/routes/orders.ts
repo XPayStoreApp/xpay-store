@@ -10,7 +10,7 @@ import {
   ListMyOrdersResponse,
 } from "@workspace/api-zod";
 import { getAdapter } from "../lib/adapter-registry";
-import { getOrCreateCurrentUser } from "../lib/currentUser.js";
+import { getOrCreateCurrentUser, getOrCreateCurrentUserStrict } from "../lib/currentUser.js";
 import { notifyUserOrderCreated, notifyUserOrderStatusChanged } from "../lib/telegram.js";
 
 const router: IRouter = Router();
@@ -295,7 +295,7 @@ router.get("/orders/:id", async (req, res) => {
 router.post("/orders", async (req, res) => {
   try {
     const body = CreateOrderBody.parse(req.body);
-    const user = await getOrCreateCurrentUser(req);
+    const user = await getOrCreateCurrentUserStrict(req);
 
     const product = (
       await db.select().from(productsTable).where(eq(productsTable.id, Number(body.productId))).limit(1)

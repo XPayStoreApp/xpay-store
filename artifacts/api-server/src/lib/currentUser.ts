@@ -173,7 +173,7 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
     identityError();
   }
 
-  if (!allowUnverifiedTelegramIdentity()) invalidIdentityError();
+  if (opts?.strict && !allowUnverifiedTelegramIdentity()) invalidIdentityError();
 
   return {
     telegramId,

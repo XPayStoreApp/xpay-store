@@ -283,4 +283,23 @@ router.post("/telegram/store/webhook", async (req, res) => {
   res.json({ ok: true });
 });
 
+router.post("/telegram/store/session", async (req, res) => {
+  const telegramUser = req.body?.user || req.body || {};
+  const user = await ensureStoreUserFromTelegram(telegramUser);
+
+  if (!user) {
+    res.status(400).json({ ok: false, error: "telegram_user_missing" });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    user: {
+      id: String(user.id),
+      telegramId: user.telegramId,
+      username: user.username,
+    },
+  });
+});
+
 export default router;
