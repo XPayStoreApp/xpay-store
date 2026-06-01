@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import bcrypt from "bcryptjs";
 import {
   db,
   adminsTable,
@@ -26,9 +27,11 @@ import { requireAdmin } from "../lib/adminAuth.js";
 import { getAdapter } from "../lib/adapter-registry"; 
 import { MersalAdapter } from "../lib/mersal-adapter";
 import { getTelegramConfigStatus, notifyUserDepositApproved, notifyUserDepositRejected, notifyUserOrderStatusChanged } from "../lib/telegram.js";
+import { rateLimit } from "../lib/rateLimit.js";
 const router: IRouter = Router();
 const EXTERNAL_CATEGORY_NAME = "External Provider";
 const EXTERNAL_CATEGORY_IMAGE = "https://placehold.co/600x400?text=External+Provider";
+const BCRYPT_ROUNDS = 12;
 
 class ValidationError extends Error {
   statusCode: number;
@@ -37,6 +40,21 @@ class ValidationError extends Error {
     this.name = "ValidationError";
     this.statusCode = 400;
   }
+}
+
+function isBcryptHash(value: string | null | undefined): boolean {
+  return /^\$2[aby]\$\d{2}\$/.test(String(value || ""));
+}
+
+async function hashAdminPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
+}
+
+async function verifyAdminPassword(storedPassword: string, candidate: string): Promise<boolean> {
+  if (isBcryptHash(storedPassword)) {
+    return bcrypt.compare(candidate, storedPassword);
+  }
+  return storedPassword === candidate;
 }
 
 function isBlank(v: unknown): boolean {
@@ -306,7 +324,14 @@ async function logActivity(
 }
 
 // ========== AUTH ==========
-router.post("/admin/login", async (req, res) => {
+const adminLoginRateLimit = rateLimit({
+  keyPrefix: "admin-login",
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "تم تجاوز عدد محاولات تسجيل الدخول. حاول بعد قليل.",
+});
+
+router.post("/admin/login", adminLoginRateLimit, async (req, res) => {
   const { username, password } = req.body as { username?: string; password?: string };
   if (!username || !password) {
     res.status(400).json({ error: "بيانات ناقصة" });
@@ -317,9 +342,15 @@ router.post("/admin/login", async (req, res) => {
     .from(adminsTable)
     .where(eq(adminsTable.username, username))
     .limit(1);
-  if (!admin || admin.password !== password || !admin.active) {
+  if (!admin || !(await verifyAdminPassword(admin.password, password)) || !admin.active) {
     res.status(401).json({ error: "بيانات الدخول غير صحيحة" });
     return;
+  }
+  if (!isBcryptHash(admin.password)) {
+    await db
+      .update(adminsTable)
+      .set({ password: await hashAdminPassword(password) })
+      .where(eq(adminsTable.id, admin.id));
   }
   req.session.adminId = admin.id;
   req.session.adminUsername = admin.username;
@@ -1002,6 +1033,11 @@ router.post("/admin/admins", requireAdmin, async (req, res) => {
     "permissions",
     "active",
   ]);
+  if (!data.password || typeof data.password !== "string") {
+    res.status(400).json({ error: "كلمة المرور مطلوبة" });
+    return;
+  }
+  data.password = await hashAdminPassword(data.password);
   const [row] = await db.insert(adminsTable).values(data).returning();
   res.json({ ...row, password: undefined });
 });
@@ -1017,6 +1053,9 @@ router.patch("/admin/admins/:id", requireAdmin, async (req, res) => {
     "active",
   ]);
   if (data.password === "") delete data.password;
+  if (typeof data.password === "string") {
+    data.password = await hashAdminPassword(data.password);
+  }
   const [row] = await db
     .update(adminsTable)
     .set(data)
@@ -1182,11 +1221,11 @@ router.put("/admin/profile", requireAdmin, async (req, res) => {
   if (fullName !== undefined) update.fullName = fullName;
   if (email !== undefined) update.email = email;
   if (newPassword) {
-    if (admin.password !== oldPassword) {
+    if (!(await verifyAdminPassword(admin.password, oldPassword))) {
       res.status(400).json({ error: "كلمة المرور الحالية غير صحيحة" });
       return;
     }
-    update.password = newPassword;
+    update.password = await hashAdminPassword(newPassword);
   }
   if (Object.keys(update).length) {
     await db.update(adminsTable).set(update).where(eq(adminsTable.id, admin.id));

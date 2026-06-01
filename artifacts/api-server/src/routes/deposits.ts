@@ -14,6 +14,7 @@ import {
   notifyUserDepositPending,
   notifyUserDepositRejected,
 } from "../lib/telegram.js";
+import { rateLimit } from "../lib/rateLimit.js";
 
 const router: IRouter = Router();
 const SAM_API_BASE_URL = process.env.SAM_API_BASE_URL || "https://sam-api.pro/api";
@@ -24,6 +25,17 @@ const SAM_API_KEY = process.env.SAM_API_KEY || "";
 const SAM_SHAMCASH_IDENTIFIER = process.env.SAM_SHAMCASH_IDENTIFIER || "";
 const SAM_WEBHOOK_SECRET = process.env.SAM_WEBHOOK_SECRET || "";
 const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL || process.env.RENDER_EXTERNAL_URL || "";
+
+const shamCashInvoiceRateLimit = rateLimit({
+  keyPrefix: "shamcash-invoice",
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: "تم تجاوز عدد محاولات إنشاء الفواتير. حاول بعد قليل.",
+  keyGenerator: (req) => {
+    const telegramId = String(req.headers["x-telegram-id"] || req.body?.telegramId || "").trim();
+    return telegramId || req.ip || "unknown";
+  },
+});
 
 function authHeaders() {
   if (!SAM_API_KEY) throw new Error("SAM_API_KEY is missing");
@@ -291,7 +303,7 @@ router.post("/deposits", async (req, res) => {
   res.json(CreateDepositResponse.parse(rowToDeposit(dep)));
 });
 
-router.post("/deposits/shamcash/invoice", async (req, res) => {
+router.post("/deposits/shamcash/invoice", shamCashInvoiceRateLimit, async (req, res) => {
   try {
     if (!SAM_API_KEY || !SAM_SHAMCASH_IDENTIFIER || !PUBLIC_API_BASE_URL) {
       res.status(500).json({
@@ -354,7 +366,8 @@ router.post("/deposits/shamcash/invoice", async (req, res) => {
       })
       .returning();
 
-    const webhookUrl = `${PUBLIC_API_BASE_URL.replace(/\/+$/, "")}/api/webhooks/shamcash?secret=${encodeURIComponent(SAM_WEBHOOK_SECRET)}`;
+    const webhookSecretPath = SAM_WEBHOOK_SECRET ? `/${encodeURIComponent(SAM_WEBHOOK_SECRET)}` : "";
+    const webhookUrl = `${PUBLIC_API_BASE_URL.replace(/\/+$/, "")}/api/webhooks/shamcash${webhookSecretPath}`;
 
     const invoiceResp = await fetch(`${SAM_API_BASE_URL.replace(/\/+$/, "")}/v1/invoices`, {
       method: "POST",
@@ -468,7 +481,7 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
           },
           body: JSON.stringify({ transactionRef }),
         });
-        const payload = await resp.json().catch(() => ({}));
+        const payload: any = await resp.json().catch(() => ({}));
         verifyResp = resp;
         verifyJson = payload;
 
@@ -535,9 +548,9 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
   }
 });
 
-router.post("/webhooks/shamcash", async (req, res) => {
+async function handleShamCashWebhook(req: any, res: any) {
   try {
-    const secret = String(req.query.secret || "");
+    const secret = String(req.params?.secret || req.headers["x-webhook-secret"] || req.query.secret || "");
     if (SAM_WEBHOOK_SECRET && secret !== SAM_WEBHOOK_SECRET) {
       res.status(401).json({ error: "invalid_webhook_secret" });
       return;
@@ -580,6 +593,9 @@ router.post("/webhooks/shamcash", async (req, res) => {
     console.error("ShamCash webhook failed:", error);
     res.status(500).json({ error: error?.message || "webhook_failed" });
   }
-});
+}
+
+router.post("/webhooks/shamcash", handleShamCashWebhook);
+router.post("/webhooks/shamcash/:secret", handleShamCashWebhook);
 
 export default router;

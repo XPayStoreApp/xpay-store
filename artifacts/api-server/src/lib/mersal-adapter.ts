@@ -67,7 +67,7 @@ export class MersalAdapter implements ProviderAdapter {
       return { success: false, status: "error", error: `HTTP ${res.status}: ${text}` };
     }
     
-    const data = await res.json();
+    const data = (await res.json()) as any;
     return {
       success: data.status === "OK",
       providerOrderId: data.data?.order_id,
@@ -94,7 +94,7 @@ export class MersalAdapter implements ProviderAdapter {
     });
     if (!res.ok) throw new Error(`Mersal check error: ${res.status}`);
     
-    const data = await res.json();
+    const data = (await res.json()) as any;
     return {
       orders: (data.data || []).map((o: any) => ({
         providerOrderId: o.order_id,

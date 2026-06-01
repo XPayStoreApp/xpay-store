@@ -1,9 +1,11 @@
 ﻿import type { Request } from "express";
+import { createHmac, timingSafeEqual } from "crypto";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 const DEFAULT_TELEGRAM_ID = "8333183867";
 const DEFAULT_USERNAME = "XPayUser";
+const TELEGRAM_AUTH_MAX_AGE_SECONDS = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS || 60 * 60 * 24);
 
 function normalizeUsername(input?: string | null): string {
   const raw = (input || "").trim();
@@ -11,7 +13,21 @@ function normalizeUsername(input?: string | null): string {
   return raw.slice(0, 64);
 }
 
-function readIdentityFromInitData(initDataRaw?: string): { telegramId: string; username: string } | null {
+function identityError(message = "telegram_identity_missing"): never {
+  const err: any = new Error(message);
+  err.statusCode = 401;
+  err.publicMessage = "هوية تيليجرام غير متاحة. افتح المتجر من داخل Telegram Mini App.";
+  throw err;
+}
+
+function invalidIdentityError(): never {
+  const err: any = new Error("telegram_identity_invalid");
+  err.statusCode = 401;
+  err.publicMessage = "تعذر التحقق من هوية تيليجرام. أعد فتح المتجر من زر البوت داخل Telegram.";
+  throw err;
+}
+
+function parseTelegramUserFromInitData(initDataRaw?: string): { telegramId: string; username: string } | null {
   try {
     const raw = String(initDataRaw || "").trim();
     if (!raw) return null;
@@ -29,41 +45,86 @@ function readIdentityFromInitData(initDataRaw?: string): { telegramId: string; u
   }
 }
 
-function tryParseIdentityFromAnyRaw(rawInput?: string): { telegramId: string; username: string } | null {
-  const raw = String(rawInput || "").trim();
+function verifyTelegramInitData(initDataRaw: string): boolean {
+  const botToken = process.env.TELEGRAM_STORE_BOT_TOKEN || "";
+  if (!botToken) return false;
+
+  const params = new URLSearchParams(initDataRaw);
+  const receivedHash = params.get("hash") || "";
+  if (!receivedHash || !/^[a-f0-9]{64}$/i.test(receivedHash)) return false;
+
+  params.delete("hash");
+  const dataCheckString = Array.from(params.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+
+  const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
+  const calculatedHash = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+
+  const received = Buffer.from(receivedHash, "hex");
+  const calculated = Buffer.from(calculatedHash, "hex");
+  if (received.length !== calculated.length || !timingSafeEqual(received, calculated)) return false;
+
+  const authDate = Number(params.get("auth_date") || 0);
+  if (Number.isFinite(TELEGRAM_AUTH_MAX_AGE_SECONDS) && TELEGRAM_AUTH_MAX_AGE_SECONDS > 0) {
+    const now = Math.floor(Date.now() / 1000);
+    if (!authDate || Math.abs(now - authDate) > TELEGRAM_AUTH_MAX_AGE_SECONDS) return false;
+  }
+
+  return true;
+}
+
+function readVerifiedIdentityFromInitData(initDataRaw?: string): { telegramId: string; username: string } | null {
+  const raw = String(initDataRaw || "").trim();
   if (!raw) return null;
+  if (!verifyTelegramInitData(raw)) return null;
+  return parseTelegramUserFromInitData(raw);
+}
 
-  // case 1: full initData query string
-  const direct = readIdentityFromInitData(raw);
-  if (direct) return direct;
+function extractInitDataCandidates(rawInput?: string): string[] {
+  const raw = String(rawInput || "").trim();
+  if (!raw) return [];
 
-  // case 2: encoded initData
+  const candidates = new Set<string>();
+  candidates.add(raw);
+
   try {
-    const decoded = decodeURIComponent(raw);
-    const fromDecoded = readIdentityFromInitData(decoded);
-    if (fromDecoded) return fromDecoded;
-  } catch {}
+    candidates.add(decodeURIComponent(raw));
+  } catch {
+    // keep raw only
+  }
 
-  // case 3: string that still contains tgWebAppData=...
-  try {
-    const full = new URLSearchParams(raw);
-    const tgWebAppData = full.get("tgWebAppData");
-    if (tgWebAppData) {
-      const nested =
-        readIdentityFromInitData(tgWebAppData) ||
-        readIdentityFromInitData(decodeURIComponent(tgWebAppData));
-      if (nested) return nested;
+  for (const candidate of Array.from(candidates)) {
+    try {
+      const full = new URLSearchParams(candidate);
+      const nested = full.get("tgWebAppData");
+      if (nested) {
+        candidates.add(nested);
+        try {
+          candidates.add(decodeURIComponent(nested));
+        } catch {
+          // keep nested only
+        }
+      }
+    } catch {
+      // ignore malformed query-like data
     }
-  } catch {}
+  }
 
+  return Array.from(candidates).map((item) => item.trim()).filter(Boolean);
+}
+
+function tryReadVerifiedIdentityFromAnyRaw(rawInput?: string): { telegramId: string; username: string } | null {
+  for (const candidate of extractInitDataCandidates(rawInput)) {
+    const identity = readVerifiedIdentityFromInitData(candidate);
+    if (identity?.telegramId) return identity;
+  }
   return null;
 }
 
-function identityError(): never {
-  const err: any = new Error("telegram_identity_missing");
-  err.statusCode = 401;
-  err.publicMessage = "هوية تيليجرام غير متاحة. افتح المتجر من داخل Telegram Mini App.";
-  throw err;
+function allowUnverifiedTelegramIdentity(): boolean {
+  return process.env.NODE_ENV !== "production" || process.env.ALLOW_UNVERIFIED_TELEGRAM_ID === "true";
 }
 
 function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { telegramId: string; username: string } {
@@ -72,12 +133,18 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
   const queryTgWebAppData = req?.query?.["tgWebAppData"] as string | undefined;
   const bodyInitData = (req as any)?.body?.telegramInitData as string | undefined;
   const bodyTgWebAppData = (req as any)?.body?.tgWebAppData as string | undefined;
-  const parsedFromInitData =
-    tryParseIdentityFromAnyRaw(initDataRaw) ||
-    tryParseIdentityFromAnyRaw(queryTgWebAppData) ||
-    tryParseIdentityFromAnyRaw(bodyInitData) ||
-    tryParseIdentityFromAnyRaw(bodyTgWebAppData);
-  if (parsedFromInitData?.telegramId) return parsedFromInitData;
+
+  const verifiedIdentity =
+    tryReadVerifiedIdentityFromAnyRaw(initDataRaw) ||
+    tryReadVerifiedIdentityFromAnyRaw(queryTgWebAppData) ||
+    tryReadVerifiedIdentityFromAnyRaw(bodyInitData) ||
+    tryReadVerifiedIdentityFromAnyRaw(bodyTgWebAppData);
+  if (verifiedIdentity?.telegramId) return verifiedIdentity;
+
+  const hasAnyInitData = Boolean(
+    String(initDataRaw || queryTgWebAppData || bodyInitData || bodyTgWebAppData || "").trim(),
+  );
+  if (hasAnyInitData && !allowUnverifiedTelegramIdentity()) invalidIdentityError();
 
   const tgIdRaw =
     (hdr["x-telegram-id"] as string | undefined) ||
@@ -97,7 +164,7 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
     if (opts?.strict) identityError();
 
     const allowFallback = process.env.ALLOW_DEFAULT_TELEGRAM_ID === "true";
-    if (allowFallback) {
+    if (allowFallback && allowUnverifiedTelegramIdentity()) {
       return {
         telegramId: DEFAULT_TELEGRAM_ID,
         username: normalizeUsername(String(usernameRaw)),
@@ -105,6 +172,8 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
     }
     identityError();
   }
+
+  if (!allowUnverifiedTelegramIdentity()) invalidIdentityError();
 
   return {
     telegramId,

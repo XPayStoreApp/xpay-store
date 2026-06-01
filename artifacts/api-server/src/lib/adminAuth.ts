@@ -1,5 +1,12 @@
-import session from "express-session";
+﻿import session from "express-session";
 import type { RequestHandler, Request, Response, NextFunction } from "express";
+
+const isProduction = process.env.NODE_ENV === "production";
+const sessionSecret = process.env["SESSION_SECRET"] || "";
+
+if (isProduction && (!sessionSecret || sessionSecret === "xpay-dev-secret")) {
+  throw new Error("SESSION_SECRET must be configured with a strong value in production.");
+}
 
 declare module "express-session" {
   interface SessionData {
@@ -10,13 +17,13 @@ declare module "express-session" {
 }
 
 export const sessionMiddleware: RequestHandler = session({
-  secret: process.env["SESSION_SECRET"] || "xpay-dev-secret",
+  secret: sessionSecret || "xpay-dev-secret",
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // true في Render
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
     maxAge: 1000 * 60 * 60 * 24 * 7,
   },
 });

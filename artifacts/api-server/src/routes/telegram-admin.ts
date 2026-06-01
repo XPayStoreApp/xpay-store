@@ -158,12 +158,17 @@ async function handleAdminCallback(req: any, res: any) {
     const actorTelegramId = String(cb.from?.id || "").trim();
     const allowed = await readAdminTelegramIds();
 
-    // If no admin IDs configured, allow callbacks to avoid blocking production flow.
-    // Keep strict allow-list when IDs are configured.
-    const isAllowed = allowed.size === 0 || allowed.has(actorTelegramId);
+    // Fail closed: approval/rejection buttons must never work without a configured admin allow-list.
+    const isAllowed = allowed.size > 0 && allowed.has(actorTelegramId);
     if (!isAllowed) {
-      await answerCallbackQuery(cb.id, "غير مصرح لك بهذا الإجراء");
-      res.json({ ok: true });
+      const message = allowed.size === 0
+        ? "لم يتم ضبط قائمة المشرفين في TELEGRAM_ADMIN_IDS"
+        : "غير مصرح لك بهذا الإجراء";
+      await answerCallbackQuery(cb.id, message);
+      res.json({
+        ok: true,
+        error: allowed.size === 0 ? "admin_ids_not_configured" : "not_allowed",
+      });
       return;
     }
 
