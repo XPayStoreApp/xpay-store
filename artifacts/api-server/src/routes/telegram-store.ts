@@ -49,6 +49,39 @@ function fullNameFromTelegramUser(user: any): string {
   return fullName || user?.username || "XPayUser";
 }
 
+async function ensureStoreUserFromTelegram(telegramUser: any) {
+  const telegramId = String(telegramUser?.id || "").trim();
+  if (!telegramId) return null;
+
+  const username = fullNameFromTelegramUser(telegramUser).slice(0, 64);
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).limit(1);
+
+  if (existing) {
+    if (!existing.username || existing.username === "XPayUser") {
+      const [updated] = await db
+        .update(usersTable)
+        .set({ username })
+        .where(eq(usersTable.id, existing.id))
+        .returning();
+      return updated || existing;
+    }
+    return existing;
+  }
+
+  const [created] = await db
+    .insert(usersTable)
+    .values({
+      telegramId,
+      username,
+      balanceUsd: "0",
+      balanceSyp: "0",
+      role: "user",
+    })
+    .returning();
+
+  return created || null;
+}
+
 async function sendAccountInfo(chatId: string | number, telegramUser: any) {
   const telegramId = String(telegramUser?.id || chatId || "").trim();
   const displayName = fullNameFromTelegramUser(telegramUser);
@@ -206,6 +239,8 @@ router.post("/telegram/store/webhook", async (req, res) => {
   const isAccountInfo = text.includes("معلومات الحساب") || text.includes("حساب المستخدم") || text.includes("account");
   const isSupport = text.includes("تواصل") || text.includes("الدعم") || text.includes("support");
   const broadcastMessage = parseBroadcastMessage(rawText);
+
+  await ensureStoreUserFromTelegram(telegramUser);
 
   if (broadcastMessage !== null) {
     await broadcastToStoreUsers(chatId, telegramUser, broadcastMessage);

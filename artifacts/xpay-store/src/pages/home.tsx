@@ -22,12 +22,14 @@ function getBrandedCategoryImage(categoryName: string, fallback?: string | null)
 }
 
 export default function Home() {
-  const { data: profile, isLoading: profileLoading } = useGetProfile();
+  const { data: profile, isLoading: profileLoading, isError: profileError } = useGetProfile();
   const { data: news, isLoading: newsLoading } = useListNews();
   const { data: banners, isLoading: bannersLoading } = useListBanners();
   const { data: categories, isLoading: categoriesLoading } = useListCategories();
 
   const [emblaRef] = useEmblaCarousel({ loop: true, direction: "rtl" }, [Autoplay({ delay: 3000 })]);
+  const isInsideTelegram = Boolean((globalThis as any)?.Telegram?.WebApp);
+  const displayName = profile?.username || (profileError ? "تعذر التحقق" : isInsideTelegram ? "جارٍ التحقق" : "ضيف");
   const shortId = profile?.telegramId
     ? (((Number(String(profile.telegramId).replace(/\D/g, "").slice(-10) || "0") % 9000) + 1000)
         .toString()
@@ -54,7 +56,7 @@ export default function Home() {
               <div>
                 <p className="text-xs text-muted-foreground">أهلاً بك يا</p>
                 <p className="text-sm font-bold text-foreground">
-                  {profileLoading ? <Skeleton className="h-4 w-20" /> : profile?.username || "ضيف"}
+                  {profileLoading ? <Skeleton className="h-4 w-20" /> : displayName}
                 </p>
               </div>
             </div>
@@ -99,6 +101,12 @@ export default function Home() {
               </div>
             </CardContent>
           </Card>
+
+          {profileError && (
+            <div className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              تعذر تحميل هوية تيليجرام. أغلق المتجر وافتحه من زر "فتح المتجر" داخل البوت، ثم أعد المحاولة.
+            </div>
+          )}
         </div>
 
         {!newsLoading && news && news.length > 0 && (
@@ -153,7 +161,7 @@ export default function Home() {
                 </div>
               ))}
             </div>
-          ) : (
+          ) : categories && categories.length > 0 ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-x-3 gap-y-5">
               {categories?.map((cat, i) => (
                 <Link key={cat.id} href={`/categories/${cat.id}`}>
@@ -177,6 +185,10 @@ export default function Home() {
                   </motion.div>
                 </Link>
               ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-card/70 px-4 py-6 text-center text-sm text-muted-foreground">
+              لا توجد أقسام متاحة حالياً.
             </div>
           )}
         </div>

@@ -142,6 +142,16 @@ function readTelegramHeaders(): Record<string, string> {
   }
 }
 
+export async function waitForTelegramIdentity(timeoutMs = 1500): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const headers = readTelegramHeaders();
+    if (headers["x-telegram-init-data"] || headers["x-telegram-id"]) return;
+    await new Promise((resolve) => setTimeout(resolve, 75));
+  }
+}
+
 /**
  * Set a base URL that is prepended to every relative request URL
  * (i.e. paths that start with `/`).
