@@ -141,11 +141,6 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
     tryReadVerifiedIdentityFromAnyRaw(bodyTgWebAppData);
   if (verifiedIdentity?.telegramId) return verifiedIdentity;
 
-  const hasAnyInitData = Boolean(
-    String(initDataRaw || queryTgWebAppData || bodyInitData || bodyTgWebAppData || "").trim(),
-  );
-  if (hasAnyInitData && !allowUnverifiedTelegramIdentity()) invalidIdentityError();
-
   const tgIdRaw =
     (hdr["x-telegram-id"] as string | undefined) ||
     (req?.query?.["tg_id"] as string | undefined) ||
@@ -160,7 +155,12 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
     DEFAULT_USERNAME;
 
   const telegramId = String(tgIdRaw || "").trim();
+  const hasAnyInitData = Boolean(
+    String(initDataRaw || queryTgWebAppData || bodyInitData || bodyTgWebAppData || "").trim(),
+  );
+
   if (!telegramId) {
+    if (hasAnyInitData && !allowUnverifiedTelegramIdentity()) invalidIdentityError();
     if (opts?.strict) identityError();
 
     const allowFallback = process.env.ALLOW_DEFAULT_TELEGRAM_ID === "true";
@@ -172,8 +172,6 @@ function readTelegramIdentity(req?: Request, opts?: { strict?: boolean }): { tel
     }
     identityError();
   }
-
-  if (opts?.strict && !allowUnverifiedTelegramIdentity()) invalidIdentityError();
 
   return {
     telegramId,

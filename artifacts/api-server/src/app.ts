@@ -9,6 +9,7 @@ import { primeTelegramIntegrations } from "./lib/telegram";
 
 const app: Express = express();
 app.set("trust proxy", 1);
+app.disable("etag");
 
 // طباعة قيمة CLIENT_URL عند بدء التشغيل للتشخيص
 console.log("🔧 CLIENT_URL from env:", process.env.CLIENT_URL);
@@ -58,6 +59,14 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(sessionMiddleware);
+
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  next();
+});
 
 primeTelegramIntegrations();
 

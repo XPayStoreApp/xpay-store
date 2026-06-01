@@ -28,6 +28,7 @@ async function registerTelegramSession() {
 
   await fetch(`${apiBase}/api/telegram/store/session`, {
     method: "POST",
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
       ...(webApp?.initData ? { "x-telegram-init-data": String(webApp.initData) } : {}),
