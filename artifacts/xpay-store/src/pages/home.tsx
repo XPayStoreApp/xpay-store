@@ -1,4 +1,5 @@
 ﻿import { useGetProfile, useListBanners, useListCategories, useListNews } from "@workspace/api-client-react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Wallet, Plus, BellRing } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,6 +7,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import useEmblaCarousel from "embla-carousel-react";
 import Autoplay from "embla-carousel-autoplay";
 import { motion } from "framer-motion";
+import { getPublicJson } from "@/lib/public-api";
+
+type CategoryItem = {
+  id: string;
+  name: string;
+  image: string;
+  order: number;
+  active: boolean;
+  productCount: number;
+};
 
 function getBrandedCategoryImage(categoryName: string, fallback?: string | null): string {
   const name = String(categoryName || "").trim().toLowerCase();
@@ -42,10 +53,30 @@ export default function Home() {
   const { data: news, isLoading: newsLoading } = useListNews();
   const { data: banners, isLoading: bannersLoading } = useListBanners();
   const { data: categories, isLoading: categoriesLoading } = useListCategories();
+  const [fallbackCategories, setFallbackCategories] = useState<CategoryItem[] | null>(null);
+
+  useEffect(() => {
+    if (categoriesLoading) return;
+    if (categories && categories.length > 0) return;
+
+    let cancelled = false;
+    getPublicJson<CategoryItem[]>("/categories")
+      .then((rows) => {
+        if (!cancelled) setFallbackCategories(rows.filter((cat) => cat.active));
+      })
+      .catch((error) => {
+        console.error("Fallback categories load failed:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [categories, categoriesLoading]);
 
   const [emblaRef] = useEmblaCarousel({ loop: true, direction: "rtl" }, [Autoplay({ delay: 3000 })]);
   const localTelegramUser = readLocalTelegramUser();
   const isInsideTelegram = Boolean((globalThis as any)?.Telegram?.WebApp);
+  const visibleCategories = (categories && categories.length > 0 ? categories : fallbackCategories) || [];
   const effectiveTelegramId = profile?.telegramId || localTelegramUser?.telegramId || "";
   const displayName =
     (profile?.telegramId ? profile.username : "") ||
@@ -174,7 +205,7 @@ export default function Home() {
             <h2 className="text-lg font-bold text-foreground">الأقسام</h2>
           </div>
 
-          {categoriesLoading ? (
+          {categoriesLoading && visibleCategories.length === 0 ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="flex flex-col items-center gap-2">
@@ -183,9 +214,9 @@ export default function Home() {
                 </div>
               ))}
             </div>
-          ) : categories && categories.length > 0 ? (
+          ) : visibleCategories.length > 0 ? (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-x-3 gap-y-5">
-              {categories?.map((cat, i) => (
+              {visibleCategories.map((cat, i) => (
                 <Link key={cat.id} href={`/categories/${cat.id}`}>
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -218,3 +249,4 @@ export default function Home() {
     </div>
   );
 }
+

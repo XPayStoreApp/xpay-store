@@ -1,12 +1,42 @@
 ﻿import { useListSocialLinks, getListSocialLinksQueryKey } from "@workspace/api-client-react";
+import { useEffect, useState } from "react";
 import { HeadphonesIcon, MessageCircle, Send, Globe, ChevronLeft, Sparkles } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
+import { getPublicJson } from "@/lib/public-api";
+
+type SocialLinkItem = {
+  id: string;
+  platform: string;
+  url: string;
+  label: string;
+};
 
 export default function Support() {
   const { data: links, isLoading } = useListSocialLinks({
     query: { queryKey: getListSocialLinksQueryKey() },
   });
+  const [fallbackLinks, setFallbackLinks] = useState<SocialLinkItem[] | null>(null);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (links && links.length > 0) return;
+
+    let cancelled = false;
+    getPublicJson<SocialLinkItem[]>("/social-links")
+      .then((rows) => {
+        if (!cancelled) setFallbackLinks(rows);
+      })
+      .catch((error) => {
+        console.error("Fallback social links load failed:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [links, isLoading]);
+
+  const visibleLinks = (links && links.length > 0 ? links : fallbackLinks) || [];
 
   const getPlatformIcon = (platform: string) => {
     const p = platform.toLowerCase();
@@ -30,10 +60,10 @@ export default function Support() {
       </div>
 
       <div className="space-y-4">
-        {isLoading ? (
+        {isLoading && visibleLinks.length === 0 ? (
           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)
-        ) : links && links.length > 0 ? (
-          links.map((link, i) => (
+        ) : visibleLinks.length > 0 ? (
+          visibleLinks.map((link, i) => (
             <motion.div
               key={link.id}
               initial={{ opacity: 0, x: -20 }}
@@ -83,3 +113,4 @@ export default function Support() {
     </div>
   );
 }
+

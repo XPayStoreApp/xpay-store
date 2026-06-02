@@ -1,8 +1,10 @@
-import { useListPaymentMethods, getListPaymentMethodsQueryKey } from "@workspace/api-client-react";
+﻿import { useListPaymentMethods, getListPaymentMethodsQueryKey } from "@workspace/api-client-react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Wallet, Smartphone, Landmark, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
+import { getPublicJson } from "@/lib/public-api";
 
 type UiMethod = {
   id: string;
@@ -28,6 +30,27 @@ export default function Deposit() {
   const { data: methods, isLoading } = useListPaymentMethods({
     query: { queryKey: getListPaymentMethodsQueryKey() },
   });
+  const [fallbackMethods, setFallbackMethods] = useState<UiMethod[] | null>(null);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (methods && methods.length > 0) return;
+
+    let cancelled = false;
+    getPublicJson<UiMethod[]>("/payment-methods")
+      .then((rows) => {
+        if (!cancelled) setFallbackMethods(rows.filter((method) => method.active));
+      })
+      .catch((error) => {
+        console.error("Fallback payment methods load failed:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [methods, isLoading]);
+
+  const visibleMethods = ((methods && methods.length > 0 ? methods : fallbackMethods) || []) as UiMethod[];
 
   const getMethodIcon = (method: Pick<UiMethod, "code" | "logoImage">) => {
     // Any payment method can provide its own logo from admin (logoImage field).
@@ -84,7 +107,7 @@ export default function Deposit() {
         <p className="text-sm text-muted-foreground">وسائل دفع آمنة ومباشرة لإضافة الرصيد إلى حسابك</p>
       </div>
 
-      {isLoading ? (
+      {isLoading && visibleMethods.length === 0 ? (
         <div className="grid grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-32 rounded-3xl" />
@@ -92,7 +115,7 @@ export default function Deposit() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4">
-          {(methods as UiMethod[] | undefined)
+          {visibleMethods
             ?.filter((m) => m.active)
             .map((method, i) => (
               <Link key={method.id} href={`/deposit/${method.code}`}>
@@ -123,3 +146,4 @@ export default function Deposit() {
     </div>
   );
 }
+
