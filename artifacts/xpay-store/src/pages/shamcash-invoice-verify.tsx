@@ -163,6 +163,11 @@ export default function ShamCashInvoiceVerify() {
         return;
       }
 
+      if (payload?.code === "TRANSACTION_REF_ALREADY_USED") {
+        toast.error("رقم العملية غير صالح أو تم استخدامه مسبقًا.");
+        return;
+      }
+
       toast.error(payload?.message || "تعذر التحقق من رقم العملية. تأكد من الرقم وحاول مجددًا.");
     } catch (error: any) {
       toast.error(error?.message || "فشل التحقق من العملية");

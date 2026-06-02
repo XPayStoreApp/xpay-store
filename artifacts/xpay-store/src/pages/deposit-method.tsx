@@ -369,6 +369,11 @@ export default function DepositMethod() {
         return;
       }
 
+      if (payload?.code === "TRANSACTION_REF_ALREADY_USED") {
+        toast.error("رقم العملية غير صالح أو تم استخدامه مسبقًا.");
+        return;
+      }
+
       const msg = String(payload?.message || "");
       if (msg === "verification_failed") {
         toast.error("تعذر التحقق من رقم العملية. تأكد من كتابة الرقم كما ظهر في شام كاش.");

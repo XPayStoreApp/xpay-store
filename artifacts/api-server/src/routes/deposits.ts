@@ -46,6 +46,78 @@ function authHeaders() {
   };
 }
 
+let shamCashRefsTableReady = false;
+
+function normalizeShamCashTransactionRef(input: unknown): string {
+  return String(input || "").replace(/\D/g, "").trim();
+}
+
+async function ensureShamCashRefsTable() {
+  if (shamCashRefsTableReady) return;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS shamcash_used_transaction_refs (
+      id SERIAL PRIMARY KEY,
+      transaction_ref TEXT NOT NULL UNIQUE,
+      deposit_id INTEGER REFERENCES deposits(id),
+      user_id INTEGER REFERENCES users(id),
+      invoice_id TEXT,
+      amount_usd NUMERIC(24, 12),
+      amount_syp NUMERIC(14, 2),
+      currency TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+  shamCashRefsTableReady = true;
+}
+
+async function isShamCashTransactionRefUsed(transactionRef: string): Promise<boolean> {
+  await ensureShamCashRefsTable();
+  const rows: any = await db.execute(sql`
+    SELECT id FROM shamcash_used_transaction_refs
+    WHERE transaction_ref = ${transactionRef}
+    LIMIT 1
+  `);
+  return Array.isArray(rows?.rows) ? rows.rows.length > 0 : Array.isArray(rows) ? rows.length > 0 : false;
+}
+
+async function reserveShamCashTransactionRef(args: {
+  transactionRef: string;
+  depositId: number;
+  userId: number;
+  invoiceId: string;
+  amountUsd: string | number;
+  amountSyp: string | number | null;
+  currency: string;
+}): Promise<boolean> {
+  await ensureShamCashRefsTable();
+  try {
+    await db.execute(sql`
+      INSERT INTO shamcash_used_transaction_refs (
+        transaction_ref,
+        deposit_id,
+        user_id,
+        invoice_id,
+        amount_usd,
+        amount_syp,
+        currency
+      )
+      VALUES (
+        ${args.transactionRef},
+        ${args.depositId},
+        ${args.userId},
+        ${args.invoiceId},
+        ${String(args.amountUsd)},
+        ${args.amountSyp == null ? null : String(args.amountSyp)},
+        ${args.currency}
+      )
+    `);
+    return true;
+  } catch (error: any) {
+    if (error?.code === "23505") return false;
+    throw error;
+  }
+}
+
 async function findIncomingShamCashTransactionByRef(
   walletIdentifier: string,
   transactionRef: string,
@@ -445,9 +517,19 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
 
     const user = await getOrCreateCurrentUserStrict(req);
     const invoiceId = String(req.body?.invoiceId || "").trim();
-    const transactionRef = String(req.body?.transactionRef || "").trim();
+    const transactionRef = normalizeShamCashTransactionRef(req.body?.transactionRef);
     if (!invoiceId || !transactionRef) {
       res.status(400).json({ error: "invoiceId and transactionRef are required" });
+      return;
+    }
+
+    if (await isShamCashTransactionRefUsed(transactionRef)) {
+      res.status(409).json({
+        ok: false,
+        verified: false,
+        message: "رقم العملية غير صالح أو تم استخدامه مسبقًا.",
+        code: "TRANSACTION_REF_ALREADY_USED",
+      });
       return;
     }
 
@@ -505,6 +587,24 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
     }
 
     if (verifyResp.ok && verifyJson?.verified === true) {
+      const reserved = await reserveShamCashTransactionRef({
+        transactionRef,
+        depositId: dep.id,
+        userId: dep.userId,
+        invoiceId,
+        amountUsd: dep.amountUsd,
+        amountSyp: dep.amountSyp,
+        currency: dep.currency,
+      });
+      if (!reserved) {
+        res.status(409).json({
+          ok: false,
+          verified: false,
+          message: "رقم العملية غير صالح أو تم استخدامه مسبقًا.",
+          code: "TRANSACTION_REF_ALREADY_USED",
+        });
+        return;
+      }
       await applyDepositStatusChangeAuto(dep.id, "approved");
       res.json({ ok: true, verified: true, message: verifyJson?.message || "verified" });
       return;
@@ -524,6 +624,24 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
       const amountMatches = Number.isFinite(depExpectedAmount) && Number.isFinite(txAmount) && txAmount >= depExpectedAmount;
 
       if (sameCurrency && amountMatches) {
+        const reserved = await reserveShamCashTransactionRef({
+          transactionRef,
+          depositId: dep.id,
+          userId: dep.userId,
+          invoiceId,
+          amountUsd: dep.amountUsd,
+          amountSyp: dep.amountSyp,
+          currency: dep.currency,
+        });
+        if (!reserved) {
+          res.status(409).json({
+            ok: false,
+            verified: false,
+            message: "رقم العملية غير صالح أو تم استخدامه مسبقًا.",
+            code: "TRANSACTION_REF_ALREADY_USED",
+          });
+          return;
+        }
         await applyDepositStatusChangeAuto(dep.id, "approved");
         res.json({
           ok: true,
@@ -538,7 +656,7 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
     res.status(400).json({
       ok: false,
       verified: false,
-      message: verifyJson?.message || "تعذر التحقق من رقم العملية. تأكد من الرقم وحاول مجددًا.",
+      message: "تعذر التحقق من رقم العملية. تأكد من الرقم وحاول مجددًا.",
       code: verifyJson?.code || null,
       upstreamStatus: verifyResp.status,
     });
@@ -575,6 +693,25 @@ async function handleShamCashWebhook(req: any, res: any) {
     }
 
     if (event === "invoice.paid") {
+      const transactionRef = normalizeShamCashTransactionRef(req.body?.transactionRef);
+      if (transactionRef) {
+        const reserved = await reserveShamCashTransactionRef({
+          transactionRef,
+          depositId: dep.id,
+          userId: dep.userId,
+          invoiceId,
+          amountUsd: dep.amountUsd,
+          amountSyp: dep.amountSyp,
+          currency: dep.currency,
+        });
+        if (!reserved) {
+          if (dep.status === "pending") {
+            await applyDepositStatusChangeAuto(dep.id, "rejected");
+          }
+          res.status(200).json({ ok: true, ignored: "transaction_ref_already_used" });
+          return;
+        }
+      }
       await applyDepositStatusChangeAuto(dep.id, "approved");
       res.status(200).json({ ok: true, status: "approved" });
       return;

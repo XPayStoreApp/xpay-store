@@ -116,6 +116,18 @@ export const depositsTable = pgTable("deposits", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const shamcashUsedTransactionRefsTable = pgTable("shamcash_used_transaction_refs", {
+  id: serial("id").primaryKey(),
+  transactionRef: text("transaction_ref").notNull().unique(),
+  depositId: integer("deposit_id").references(() => depositsTable.id),
+  userId: integer("user_id").references(() => usersTable.id),
+  invoiceId: text("invoice_id"),
+  amountUsd: numeric("amount_usd", { precision: 24, scale: 12 }),
+  amountSyp: numeric("amount_syp", { precision: 14, scale: 2 }),
+  currency: text("currency"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const adminsTable = pgTable("admins", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
