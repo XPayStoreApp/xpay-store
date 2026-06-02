@@ -19,9 +19,6 @@ export default function Support() {
   const [fallbackLinks, setFallbackLinks] = useState<SocialLinkItem[] | null>(null);
 
   useEffect(() => {
-    if (isLoading) return;
-    if (links && links.length > 0) return;
-
     let cancelled = false;
     getPublicJson<SocialLinkItem[]>("/social-links")
       .then((rows) => {
@@ -34,9 +31,9 @@ export default function Support() {
     return () => {
       cancelled = true;
     };
-  }, [links, isLoading]);
+  }, []);
 
-  const visibleLinks = (links && links.length > 0 ? links : fallbackLinks) || [];
+  const visibleLinks = (fallbackLinks && fallbackLinks.length > 0 ? fallbackLinks : links) || [];
 
   const getPlatformIcon = (platform: string) => {
     const p = platform.toLowerCase();

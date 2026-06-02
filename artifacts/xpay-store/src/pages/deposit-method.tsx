@@ -8,7 +8,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getPublicJson } from "@/lib/public-api";
 
 const depositSchema = z.object({
   currency: z.enum(["USD", "SYP"]),
@@ -132,6 +133,7 @@ export default function DepositMethod() {
   const { data: methods, isLoading } = useListPaymentMethods({
     query: { queryKey: getListPaymentMethodsQueryKey() },
   });
+  const [fallbackMethods, setFallbackMethods] = useState<UiMethod[] | null>(null);
 
   const createDeposit = useCreateDeposit();
   const [proofImageName, setProofImageName] = useState("");
@@ -140,7 +142,23 @@ export default function DepositMethod() {
   const [autoLoading, setAutoLoading] = useState(false);
   const [autoVerifying, setAutoVerifying] = useState(false);
 
-  const method = (methods as UiMethod[] | undefined)?.find((m) => m.code === methodCode);
+  useEffect(() => {
+    let cancelled = false;
+    getPublicJson<UiMethod[]>("/payment-methods")
+      .then((rows) => {
+        if (!cancelled) setFallbackMethods(rows);
+      })
+      .catch((error) => {
+        console.error("Fallback payment method load failed:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const visibleMethods = ((fallbackMethods && fallbackMethods.length > 0 ? fallbackMethods : methods) || []) as UiMethod[];
+  const method = visibleMethods.find((m) => m.code === methodCode);
   const apiBaseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
   const isShamCashAuto = method?.code === "sham_cash_auto";
   const isShamCashManual = method?.code === "sham_cash";
@@ -368,7 +386,7 @@ export default function DepositMethod() {
     toast.success("تم النسخ بنجاح");
   };
 
-  if (isLoading) {
+  if (isLoading && visibleMethods.length === 0) {
     return (
       <div className="min-h-screen bg-background p-4 pt-8">
         <Skeleton className="h-8 w-32 mb-8" />

@@ -2,18 +2,52 @@ import { useListProducts, getListProductsQueryKey } from "@workspace/api-client-
 import { Link, useRoute } from "wouter";
 import { ChevronRight, Search, PackageOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
+import { getPublicJson } from "@/lib/public-api";
+
+type ProductItem = {
+  id: string;
+  name: string;
+  categoryId: string;
+  categoryName: string;
+  image: string;
+  priceUsd: number;
+};
 
 export default function Categories() {
   const [, params] = useRoute("/categories/:id");
   const categoryId = params?.id;
   const [search, setSearch] = useState("");
+  const [fallbackProducts, setFallbackProducts] = useState<ProductItem[] | null>(null);
 
   const { data: products, isLoading } = useListProducts(
     { categoryId, q: search || undefined },
     { query: { enabled: !!categoryId, queryKey: getListProductsQueryKey({ categoryId, q: search || undefined }) } }
+  );
+  useEffect(() => {
+    if (!categoryId) return;
+
+    let cancelled = false;
+    const query = search.trim();
+    const path = `/products?categoryId=${encodeURIComponent(categoryId)}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
+    getPublicJson<ProductItem[]>(path)
+      .then((rows) => {
+        if (!cancelled) setFallbackProducts(rows);
+      })
+      .catch((error) => {
+        console.error("Fallback products load failed:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryId, search]);
+
+  const visibleProducts = useMemo(
+    () => (fallbackProducts && fallbackProducts.length > 0 ? fallbackProducts : products) || [],
+    [fallbackProducts, products],
   );
 
   return (
@@ -40,7 +74,7 @@ export default function Categories() {
 
       {/* Content */}
       <div className="flex-1 p-4">
-        {isLoading ? (
+        {isLoading && visibleProducts.length === 0 ? (
           <div className="grid grid-cols-4 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex flex-col gap-2">
@@ -50,9 +84,9 @@ export default function Categories() {
               </div>
             ))}
           </div>
-        ) : products && products.length > 0 ? (
+        ) : visibleProducts.length > 0 ? (
           <div className="grid grid-cols-4 gap-3">
-            {products.map((product, i) => (
+            {visibleProducts.map((product, i) => (
               <Link key={product.id} href={`/products/${product.id}`}>
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95 }}

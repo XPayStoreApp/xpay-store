@@ -33,9 +33,6 @@ export default function Deposit() {
   const [fallbackMethods, setFallbackMethods] = useState<UiMethod[] | null>(null);
 
   useEffect(() => {
-    if (isLoading) return;
-    if (methods && methods.length > 0) return;
-
     let cancelled = false;
     getPublicJson<UiMethod[]>("/payment-methods")
       .then((rows) => {
@@ -48,9 +45,9 @@ export default function Deposit() {
     return () => {
       cancelled = true;
     };
-  }, [methods, isLoading]);
+  }, []);
 
-  const visibleMethods = ((methods && methods.length > 0 ? methods : fallbackMethods) || []) as UiMethod[];
+  const visibleMethods = ((fallbackMethods && fallbackMethods.length > 0 ? fallbackMethods : methods) || []) as UiMethod[];
 
   const getMethodIcon = (method: Pick<UiMethod, "code" | "logoImage">) => {
     // Any payment method can provide its own logo from admin (logoImage field).

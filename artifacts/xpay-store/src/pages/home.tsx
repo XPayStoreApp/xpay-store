@@ -56,9 +56,6 @@ export default function Home() {
   const [fallbackCategories, setFallbackCategories] = useState<CategoryItem[] | null>(null);
 
   useEffect(() => {
-    if (categoriesLoading) return;
-    if (categories && categories.length > 0) return;
-
     let cancelled = false;
     getPublicJson<CategoryItem[]>("/categories")
       .then((rows) => {
@@ -71,12 +68,12 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [categories, categoriesLoading]);
+  }, []);
 
   const [emblaRef] = useEmblaCarousel({ loop: true, direction: "rtl" }, [Autoplay({ delay: 3000 })]);
   const localTelegramUser = readLocalTelegramUser();
   const isInsideTelegram = Boolean((globalThis as any)?.Telegram?.WebApp);
-  const visibleCategories = (categories && categories.length > 0 ? categories : fallbackCategories) || [];
+  const visibleCategories = (fallbackCategories && fallbackCategories.length > 0 ? fallbackCategories : categories) || [];
   const effectiveTelegramId = profile?.telegramId || localTelegramUser?.telegramId || "";
   const displayName =
     (profile?.telegramId ? profile.username : "") ||
