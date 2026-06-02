@@ -136,7 +136,9 @@ export default function ShamCashInvoiceVerify() {
         headers: {
           "Content-Type": "application/json",
           ...(tg?.id ? { "x-telegram-id": tg.id } : {}),
-          ...(tg?.initDataRaw || webAppData ? { "x-telegram-init-data": tg?.initDataRaw || webAppData } : {}),
+          ...(tg?.initDataRaw || webAppData
+            ? { "x-telegram-init-data": encodeURIComponent(tg?.initDataRaw || webAppData) }
+            : {}),
         },
         body: JSON.stringify({
           invoiceId,

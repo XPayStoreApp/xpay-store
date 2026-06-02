@@ -31,11 +31,8 @@ async function registerTelegramSession() {
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
-      ...(webApp?.initData ? { "x-telegram-init-data": String(webApp.initData) } : {}),
+      ...(webApp?.initData ? { "x-telegram-init-data": encodeURIComponent(String(webApp.initData)) } : {}),
       "x-telegram-id": String(user.id),
-      "x-telegram-username": String(user.username || ""),
-      "x-telegram-first-name": String(user.first_name || ""),
-      "x-telegram-last-name": String(user.last_name || ""),
     },
     body: JSON.stringify({ user }),
   }).catch((error) => {

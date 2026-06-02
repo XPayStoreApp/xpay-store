@@ -47,6 +47,10 @@ function cacheTelegramIdentity(identity: TelegramIdentity): void {
   }
 }
 
+function safeHeaderValue(value?: string | null): string {
+  return encodeURIComponent(String(value || ""));
+}
+
 function readTelegramHeaders(): Record<string, string> {
   const readInitDataRaw = (): string => {
     try {
@@ -124,20 +128,14 @@ function readTelegramHeaders(): Record<string, string> {
     const initDataRaw = effective.initDataRaw || readInitDataRaw();
     return {
       "x-telegram-id": effective.id,
-      "x-telegram-username": effective.username,
-      "x-telegram-first-name": effective.firstName,
-      "x-telegram-last-name": effective.lastName,
-      ...(initDataRaw ? { "x-telegram-init-data": initDataRaw } : {}),
+      ...(initDataRaw ? { "x-telegram-init-data": safeHeaderValue(initDataRaw) } : {}),
     };
   } catch {
     const cached = readCachedTelegramIdentity();
     if (!cached?.id) return {};
     return {
       "x-telegram-id": cached.id,
-      "x-telegram-username": cached.username,
-      "x-telegram-first-name": cached.firstName,
-      "x-telegram-last-name": cached.lastName,
-      ...(cached.initDataRaw ? { "x-telegram-init-data": cached.initDataRaw } : {}),
+      ...(cached.initDataRaw ? { "x-telegram-init-data": safeHeaderValue(cached.initDataRaw) } : {}),
     };
   }
 }
