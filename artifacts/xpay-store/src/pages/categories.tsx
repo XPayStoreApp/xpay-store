@@ -14,12 +14,19 @@ type ProductItem = {
   categoryName: string;
   image: string;
   priceUsd: number;
+  minQty?: number;
 };
 
-function formatUsdPrice(value: number) {
-  const amount = Number(value || 0);
-  if (!Number.isFinite(amount)) return "$0.00";
-  return `$${amount.toFixed(2)}`;
+function getDefaultQuantity(product: ProductItem) {
+  const minQty = Number(product.minQty || 1);
+  return Number.isFinite(minQty) && minQty > 0 ? minQty : 1;
+}
+
+function formatTotalUsdPrice(product: ProductItem) {
+  const unitPrice = Number(product.priceUsd || 0);
+  const total = unitPrice * getDefaultQuantity(product);
+  if (!Number.isFinite(total)) return "$0.00000";
+  return `$${total.toFixed(5)}`;
 }
 
 export default function Categories() {
@@ -118,7 +125,7 @@ export default function Categories() {
                       {product.name}
                     </h3>
                     <span className="text-[11px] font-black text-primary leading-none">
-                      {formatUsdPrice(product.priceUsd)}
+                      {formatTotalUsdPrice(product)}
                     </span>
                   </div>
                 </motion.div>
