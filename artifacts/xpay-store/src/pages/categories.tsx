@@ -16,6 +16,12 @@ type ProductItem = {
   priceUsd: number;
 };
 
+function formatUsdPrice(value: number) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return "$0.00";
+  return `$${amount.toFixed(2)}`;
+}
+
 export default function Categories() {
   const [, params] = useRoute("/categories/:id");
   const categoryId = params?.id;
@@ -26,6 +32,7 @@ export default function Categories() {
     { categoryId, q: search || undefined },
     { query: { enabled: !!categoryId, queryKey: getListProductsQueryKey({ categoryId, q: search || undefined }) } }
   );
+
   useEffect(() => {
     if (!categoryId) return;
 
@@ -52,7 +59,6 @@ export default function Categories() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col animate-in slide-in-from-right-4 duration-300">
-      {/* Top App Bar */}
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-3">
         <Link href="/">
           <div className="bg-card p-2 rounded-full cursor-pointer hover:bg-white/5 transition-colors">
@@ -62,57 +68,58 @@ export default function Categories() {
         <div className="flex-1">
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
+            <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث عن منتج..." 
+              placeholder="ابحث عن منتج..."
               className="pl-3 pr-9 h-10 bg-card border-white/5 rounded-full text-sm focus-visible:ring-primary/50"
             />
           </div>
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 p-4">
         {isLoading && visibleProducts.length === 0 ? (
-          <div className="grid grid-cols-4 gap-3">
-            {Array.from({ length: 6 }).map((_, i) => (
+          <div className="grid grid-cols-4 gap-3.5">
+            {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="flex flex-col gap-2">
-                <Skeleton className="w-full aspect-[4/3] rounded-xl" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="w-full aspect-[4/3] rounded-2xl" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-3 w-2/3 mx-auto" />
               </div>
             ))}
           </div>
         ) : visibleProducts.length > 0 ? (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-4 gap-3.5">
             {visibleProducts.map((product, i) => (
               <Link key={product.id} href={`/products/${product.id}`}>
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: i * 0.05 }}
-                  className="bg-card border border-white/5 rounded-2xl overflow-hidden cursor-pointer group shadow-lg hover:border-primary/30 transition-all"
+                  className="h-full min-h-[126px] bg-card/90 border border-white/5 rounded-2xl overflow-hidden cursor-pointer group shadow-lg hover:border-primary/30 transition-all flex flex-col"
                 >
-                  <div className="aspect-[4/3] relative overflow-hidden bg-muted/30">
+                  <div className="aspect-[4/3] relative overflow-hidden bg-muted/30 shrink-0">
                     {product.image ? (
-                      <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
                     ) : (
                       <div className="w-full h-full xpay-brand-card flex items-center justify-center">
                         <PackageOpen className="w-8 h-8 text-primary/40" />
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
-                    <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end">
-                      <span className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md">
-                        ${product.priceUsd.toFixed(2)}
-                      </span>
-                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
                   </div>
-                  <div className="p-3">
-                    <h3 className="text-xs font-semibold text-foreground line-clamp-2 leading-tight group-hover:text-primary transition-colors">
+                  <div className="min-h-[58px] p-2.5 flex flex-col items-center justify-center gap-1">
+                    <h3 className="text-[11px] sm:text-xs font-bold text-foreground line-clamp-2 leading-snug text-center break-words group-hover:text-primary transition-colors">
                       {product.name}
                     </h3>
+                    <span className="text-[11px] font-black text-primary leading-none">
+                      {formatUsdPrice(product.priceUsd)}
+                    </span>
                   </div>
                 </motion.div>
               </Link>
@@ -124,7 +131,7 @@ export default function Categories() {
               <Search className="w-8 h-8" />
             </div>
             <p className="text-foreground font-medium">لا توجد منتجات</p>
-            <p className="text-sm text-muted-foreground mt-1">جرب البحث بكلمات أخرى</p>
+            <p className="text-sm text-muted-foreground mt-1">جرّب البحث بكلمات أخرى</p>
           </div>
         )}
       </div>

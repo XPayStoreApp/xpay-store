@@ -13,9 +13,7 @@ import {
 const router: IRouter = Router();
 
 function productRow(p: typeof productsTable.$inferSelect, categoryName: string) {
-  const markupUsd = Number(p.priceUsd || 0);
-  const baseCostUsd = p.basePriceUsd != null ? Number(p.basePriceUsd) : 0;
-  const finalPriceUsd = p.providerId ? baseCostUsd + markupUsd : markupUsd;
+  const dashboardPriceUsd = Number(p.priceUsd || 0);
 
   return {
     id: String(p.id),
@@ -23,7 +21,7 @@ function productRow(p: typeof productsTable.$inferSelect, categoryName: string) 
     categoryId: String(p.categoryId),
     categoryName,
     image: p.image,
-    priceUsd: finalPriceUsd,
+    priceUsd: dashboardPriceUsd,
     priceSyp: Number(p.priceSyp),
     productType: p.productType as "amount" | "package",
     available: p.available,
