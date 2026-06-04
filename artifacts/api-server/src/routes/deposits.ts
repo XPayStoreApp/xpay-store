@@ -47,6 +47,16 @@ function authHeaders() {
 }
 
 let shamCashRefsTableReady = false;
+let depositsTelegramMessageColumnReady = false;
+
+async function ensureDepositsTelegramMessageColumn() {
+  if (depositsTelegramMessageColumnReady) return;
+  await db.execute(sql`
+    ALTER TABLE deposits
+    ADD COLUMN IF NOT EXISTS telegram_message_id INTEGER
+  `);
+  depositsTelegramMessageColumnReady = true;
+}
 
 function normalizeShamCashTransactionRef(input: unknown): string {
   return String(input || "").replace(/\D/g, "").trim();
@@ -145,6 +155,7 @@ async function findIncomingShamCashTransactionByRef(
 }
 
 async function applyDepositStatusChangeAuto(id: number, status: "approved" | "rejected") {
+  await ensureDepositsTelegramMessageColumn();
   const [dep] = await db.select().from(depositsTable).where(eq(depositsTable.id, id)).limit(1);
   if (!dep) return { error: "not_found" as const };
 
@@ -202,6 +213,7 @@ async function syncShamCashInvoiceStatus(invoiceId: string): Promise<{
 }> {
   const cleanInvoiceId = String(invoiceId || "").trim();
   if (!cleanInvoiceId) return { found: false };
+  await ensureDepositsTelegramMessageColumn();
 
   const [dep] = await db
     .select()
@@ -259,6 +271,7 @@ function rowToDeposit(d: typeof depositsTable.$inferSelect) {
 
 router.get("/deposits", async (req, res) => {
   const user = await getOrCreateCurrentUserStrict(req);
+  await ensureDepositsTelegramMessageColumn();
   await syncPendingShamCashDepositsForUser(user.id);
   const status = (req.query.status as string | undefined) ?? "all";
   const method = (req.query.method as string | undefined) ?? "all";
@@ -275,6 +288,7 @@ router.get("/deposits", async (req, res) => {
 
 router.get("/deposits/summary", async (_req, res) => {
   const user = await getOrCreateCurrentUserStrict(_req);
+  await ensureDepositsTelegramMessageColumn();
   await syncPendingShamCashDepositsForUser(user.id);
   const all = await db
     .select({
@@ -299,6 +313,7 @@ router.get("/deposits/summary", async (_req, res) => {
 router.post("/deposits/shamcash/:invoiceId/sync", async (req, res) => {
   try {
     const user = await getOrCreateCurrentUserStrict(req);
+    await ensureDepositsTelegramMessageColumn();
     const invoiceId = String(req.params.invoiceId || "").trim();
     if (!invoiceId) {
       res.status(400).json({ error: "invoiceId is required" });
@@ -324,6 +339,7 @@ router.post("/deposits/shamcash/:invoiceId/sync", async (req, res) => {
 });
 
 router.post("/deposits", async (req, res) => {
+  await ensureDepositsTelegramMessageColumn();
   const body = CreateDepositBody.parse(req.body);
   const transactionId = String(body.transactionId || "").trim();
   if (!/^\d+$/.test(transactionId)) {
@@ -384,6 +400,7 @@ router.post("/deposits", async (req, res) => {
 
 router.post("/deposits/shamcash/invoice", shamCashInvoiceRateLimit, async (req, res) => {
   try {
+    await ensureDepositsTelegramMessageColumn();
     if (!SAM_API_KEY || !SAM_SHAMCASH_IDENTIFIER || !PUBLIC_API_BASE_URL) {
       res.status(500).json({
         error: "SAM config missing",
@@ -523,6 +540,7 @@ router.post("/deposits/shamcash/invoice", shamCashInvoiceRateLimit, async (req, 
 
 router.post("/deposits/shamcash/verify", async (req, res) => {
   try {
+    await ensureDepositsTelegramMessageColumn();
     if (!SAM_API_KEY) {
       res.status(500).json({ error: "SAM_API_KEY missing" });
       return;
@@ -681,6 +699,7 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
 
 async function handleShamCashWebhook(req: any, res: any) {
   try {
+    await ensureDepositsTelegramMessageColumn();
     const secret = String(req.params?.secret || req.headers["x-webhook-secret"] || req.query.secret || "");
     if (SAM_WEBHOOK_SECRET && secret !== SAM_WEBHOOK_SECRET) {
       res.status(401).json({ error: "invalid_webhook_secret" });

@@ -32,6 +32,16 @@ const router: IRouter = Router();
 const EXTERNAL_CATEGORY_NAME = "External Provider";
 const EXTERNAL_CATEGORY_IMAGE = "https://placehold.co/600x400?text=External+Provider";
 const BCRYPT_ROUNDS = 12;
+let depositsTelegramMessageColumnReady = false;
+
+async function ensureDepositsTelegramMessageColumn() {
+  if (depositsTelegramMessageColumnReady) return;
+  await db.execute(sql`
+    ALTER TABLE deposits
+    ADD COLUMN IF NOT EXISTS telegram_message_id INTEGER
+  `);
+  depositsTelegramMessageColumnReady = true;
+}
 
 class ValidationError extends Error {
   statusCode: number;
@@ -213,6 +223,7 @@ async function getOrCreateExternalCategoryId(): Promise<number> {
 }
 
 async function applyDepositStatusChange(id: number, status: string) {
+  await ensureDepositsTelegramMessageColumn();
   const [dep] = await db.select().from(depositsTable).where(eq(depositsTable.id, id)).limit(1);
   if (!dep) return { error: "not_found" as const };
   if (dep.method === "sham_cash_auto") {

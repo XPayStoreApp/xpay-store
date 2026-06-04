@@ -10,6 +10,16 @@ import {
 } from "../lib/telegram.js";
 
 const router: IRouter = Router();
+let depositsTelegramMessageColumnReady = false;
+
+async function ensureDepositsTelegramMessageColumn() {
+  if (depositsTelegramMessageColumnReady) return;
+  await db.execute(sql`
+    ALTER TABLE deposits
+    ADD COLUMN IF NOT EXISTS telegram_message_id INTEGER
+  `);
+  depositsTelegramMessageColumnReady = true;
+}
 
 type TelegramUpdate = {
   callback_query?: {
@@ -79,6 +89,7 @@ async function readAdminTelegramIds(): Promise<Set<string>> {
 }
 
 async function applyDepositDecision(depositId: number, status: "approved" | "rejected") {
+  await ensureDepositsTelegramMessageColumn();
   const [dep] = await db
     .select()
     .from(depositsTable)
