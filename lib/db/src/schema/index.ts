@@ -112,6 +112,7 @@ export const depositsTable = pgTable("deposits", {
   methodLabel: text("method_label").notNull(),
   transactionId: text("transaction_id").notNull(),
   proofImage: text("proof_image"),
+  telegramMessageId: integer("telegram_message_id"),
   status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

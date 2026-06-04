@@ -92,9 +92,9 @@ export async function sendTelegramMessage(
   chatId: string | number,
   text: string,
   inlineButtons?: InlineButton[],
-): Promise<void> {
+): Promise<any | null> {
   const url = apiUrl(kind, "sendMessage");
-  if (!url) return;
+  if (!url) return null;
 
   if (kind === "admin") {
     await ensureAdminWebhook();
@@ -116,6 +116,37 @@ export async function sendTelegramMessage(
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`Telegram sendMessage failed: ${res.status} ${txt}`);
+  }
+  return res.json().catch(() => null);
+}
+
+export async function editTelegramMessageText(
+  kind: "admin" | "store",
+  chatId: string | number,
+  messageId: number,
+  text: string,
+): Promise<void> {
+  const url = apiUrl(kind, "editMessageText");
+  if (!url) return;
+
+  if (kind === "admin") {
+    await ensureAdminWebhook();
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Telegram editMessageText failed: ${res.status} ${txt}`);
   }
 }
 
@@ -183,12 +214,19 @@ export async function notifyUserDepositApproved(args: {
   addedUsd: number;
   currentUsd: number;
   operationNumber: string;
+  messageId?: number | null;
 }) {
   const msg =
-    `✅ تم التحقق من الإيداع بنجاح!\n` +
-    `تمت إضافة $${args.addedUsd.toFixed(3)} إلى رصيدك.\n` +
-    `رصيدك الحالي: $${args.currentUsd.toFixed(3)}\n\n` +
-    `رقم العملية: ${args.operationNumber}`;
+    `<b>✅ تم التحقق بنجاح!</b>\n` +
+    `<b>تمت إضافة</b> ${args.addedUsd.toFixed(3)}$ <b>إلى رصيدك.</b>\n` +
+    `<b>رصيدك الحالي:</b> $${args.currentUsd.toFixed(3)}\n\n` +
+    `<b>رقم العملية:</b> ${args.operationNumber}`;
+
+  if (args.messageId) {
+    await editTelegramMessageText("store", args.telegramId, args.messageId, msg);
+    return;
+  }
+
   await sendTelegramMessage("store", args.telegramId, msg);
 }
 export async function notifyUserDepositPending(args: {
@@ -196,14 +234,15 @@ export async function notifyUserDepositPending(args: {
   operationNumber: string;
   amount: number;
   currency: "USD" | "SYP";
-}) {
+}): Promise<number | null> {
   const amountLabel = args.currency === "USD" ? `${args.amount.toFixed(3)}$` : `${args.amount.toFixed(0)}.SY`;
   const msg =
-    `⏳ تم استلام طلب الإيداع وهو الآن قيد المراجعة.\n` +
-    `المبلغ: ${amountLabel}\n` +
-    `رقم العملية: ${args.operationNumber}\n\n` +
-    `انتظر قليلاً، سيصلك إشعار تلقائي عند قبول أو رفض العملية.`;
-  await sendTelegramMessage("store", args.telegramId, msg);
+    `<b>⏳ تم استلام طلب الإيداع الخاص بك وهو الآن قيد المراجعة.</b>\n` +
+    `<b>المبلغ:</b> ${amountLabel}\n` +
+    `<b>انتظر قليلاً، سيصلك إشعار تلقائي عند قبول أو رفض العملية.</b>`;
+  const result = await sendTelegramMessage("store", args.telegramId, msg);
+  const messageId = Number(result?.result?.message_id);
+  return Number.isFinite(messageId) ? messageId : null;
 }
 export async function notifyUserDepositRejected(args: {
   telegramId: string;

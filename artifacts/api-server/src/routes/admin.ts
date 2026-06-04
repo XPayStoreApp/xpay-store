@@ -250,6 +250,7 @@ async function applyDepositStatusChange(id: number, status: string) {
           addedUsd: Number(dep.amountUsd),
           currentUsd: Number(user.balanceUsd),
           operationNumber: String(dep.id),
+          messageId: dep.telegramMessageId,
         });
       } else if (status === "rejected") {
         await notifyUserDepositRejected({

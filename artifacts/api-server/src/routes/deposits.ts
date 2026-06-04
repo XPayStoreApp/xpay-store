@@ -179,6 +179,7 @@ async function applyDepositStatusChangeAuto(id: number, status: "approved" | "re
           addedUsd: Number(dep.amountUsd),
           currentUsd: Number(user.balanceUsd),
           operationNumber: String(dep.id),
+          messageId: dep.telegramMessageId,
         });
       } else {
         await notifyUserDepositRejected({
@@ -363,12 +364,18 @@ router.post("/deposits", async (req, res) => {
       transactionId,
       proofImage,
     });
-    await notifyUserDepositPending({
+    const pendingMessageId = await notifyUserDepositPending({
       telegramId: user.telegramId,
       operationNumber: String(dep.id),
       amount: body.amount,
       currency: body.currency,
     });
+    if (pendingMessageId) {
+      await db
+        .update(depositsTable)
+        .set({ telegramMessageId: pendingMessageId })
+        .where(eq(depositsTable.id, dep.id));
+    }
   } catch (error) {
     console.error("Notify admins about deposit failed:", error);
   }
@@ -473,12 +480,18 @@ router.post("/deposits/shamcash/invoice", shamCashInvoiceRateLimit, async (req, 
       .where(eq(depositsTable.id, dep.id));
 
     try {
-      await notifyUserDepositPending({
+      const pendingMessageId = await notifyUserDepositPending({
         telegramId: user.telegramId,
         operationNumber: String(invoiceJson.invoiceId),
         amount,
         currency: currency as "USD" | "SYP",
       });
+      if (pendingMessageId) {
+        await db
+          .update(depositsTable)
+          .set({ telegramMessageId: pendingMessageId })
+          .where(eq(depositsTable.id, dep.id));
+      }
     } catch (error) {
       console.error("Notify auto-deposit pending failed:", error);
     }

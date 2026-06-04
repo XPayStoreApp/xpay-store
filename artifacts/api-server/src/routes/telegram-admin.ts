@@ -112,8 +112,9 @@ async function applyDepositDecision(depositId: number, status: "approved" | "rej
       await notifyUserDepositApproved({
         telegramId: user.telegramId,
         addedUsd: Number(dep.amountUsd),
-        currentUsd: Number(user.balanceUsd) + Number(dep.amountUsd),
+        currentUsd: Number(user.balanceUsd),
         operationNumber: String(dep.id),
+        messageId: dep.telegramMessageId,
       });
     } else {
       await notifyUserDepositRejected({
