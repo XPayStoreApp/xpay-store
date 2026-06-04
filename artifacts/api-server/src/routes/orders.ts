@@ -375,10 +375,12 @@ router.post("/orders", async (req, res) => {
       }
     }
 
-    const providerCostUnitPriceUsd = product.providerId
-      ? liveProviderUnitPrice || (product.basePriceUsd != null ? String(product.basePriceUsd) : "0")
-      : "0";
-    const finalUnitPriceUsd = String(product.priceUsd);
+    const dashboardMarkupUsd = String(product.priceUsd);
+    const storedBaseCostUsd = product.basePriceUsd != null ? String(product.basePriceUsd) : "0";
+    const providerUnitPriceUsd = product.providerId ? liveProviderUnitPrice || storedBaseCostUsd : "0";
+    const finalUnitPriceUsd = product.providerId
+      ? addDecimalStrings(providerUnitPriceUsd, dashboardMarkupUsd)
+      : dashboardMarkupUsd;
     const totalUsd = multiplyDecimalByQuantity(finalUnitPriceUsd, body.quantity);
     const totalSyp = Number(product.priceSyp) * body.quantity;
     const balanceBeforeUsd = String(user.balanceUsd);
@@ -438,8 +440,8 @@ router.post("/orders", async (req, res) => {
 
     const meta: any = {
       pricing: {
-        providerCostUnitPriceUsd,
-        dashboardPriceUsd: finalUnitPriceUsd,
+        providerUnitPriceUsd,
+        dashboardMarkupUsd,
         finalUnitPriceUsd,
       },
     };
