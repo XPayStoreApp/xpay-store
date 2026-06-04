@@ -46,6 +46,22 @@ function authHeaders() {
   };
 }
 
+async function fetchJsonWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = 10000,
+): Promise<{ response: Response; payload: any }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    return { response, payload };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 let shamCashRefsTableReady = false;
 let depositsTelegramMessageColumnReady = false;
 
@@ -133,12 +149,20 @@ async function findIncomingShamCashTransactionByRef(
   transactionRef: string,
 ): Promise<{ found: boolean; amount?: number; currency?: string }> {
   const txUrl = `${SAM_API_BASE_URL.replace(/\/+$/, "")}/v1/wallets/shamcash/${encodeURIComponent(walletIdentifier)}/transactions?direction=in`;
-  const resp = await fetch(txUrl, {
-    method: "GET",
-    headers: authHeaders(),
-  });
-  const payload: any = await resp.json().catch(() => ({}));
-  if (!resp.ok || !Array.isArray(payload)) {
+  const { response, payload } = await fetchJsonWithTimeout(
+    txUrl,
+    {
+      method: "GET",
+      headers: authHeaders(),
+    },
+    10000,
+  );
+  if (!response.ok || !Array.isArray(payload)) {
+    console.error("ShamCash transactions lookup failed:", {
+      status: response.status,
+      code: payload?.code,
+      message: payload?.message,
+    });
     return { found: false };
   }
 
@@ -577,29 +601,29 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
 
     const verifyUrls = [
       `${SAM_PAY_BASE_URL.replace(/\/+$/, "")}/pay/${encodeURIComponent(invoiceId)}/verify`,
-      `${SAM_API_BASE_URL.replace(/\/+$/, "")}/pay/${encodeURIComponent(invoiceId)}/verify`,
-    ].filter((u, idx, arr) => arr.indexOf(u) === idx);
+    ];
 
     let verifyResp: Response | null = null;
     let verifyJson: any = {};
 
     for (const url of verifyUrls) {
       try {
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${SAM_API_KEY}`,
-            "X-Api-Key": SAM_API_KEY,
+        const { response, payload } = await fetchJsonWithTimeout(
+          url,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ transactionRef }),
           },
-          body: JSON.stringify({ transactionRef }),
-        });
-        const payload: any = await resp.json().catch(() => ({}));
-        verifyResp = resp;
+          10000,
+        );
+        verifyResp = response;
         verifyJson = payload;
 
         // stop on success, or when provider returned a structured response
-        if (resp.ok || payload?.verified !== undefined || payload?.message || payload?.code) {
+        if (response.ok || payload?.verified !== undefined || payload?.message || payload?.code) {
           break;
         }
       } catch (error) {
@@ -607,17 +631,7 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
       }
     }
 
-    if (!verifyResp) {
-      res.status(502).json({
-        ok: false,
-        verified: false,
-        message: "تعذر الوصول إلى مزود التحقق.",
-        code: "VERIFY_UPSTREAM_UNREACHABLE",
-      });
-      return;
-    }
-
-    if (verifyResp.ok && verifyJson?.verified === true) {
+    if (verifyResp?.ok && verifyJson?.verified === true) {
       const reserved = await reserveShamCashTransactionRef({
         transactionRef,
         depositId: dep.id,
@@ -687,9 +701,11 @@ router.post("/deposits/shamcash/verify", async (req, res) => {
     res.status(400).json({
       ok: false,
       verified: false,
-      message: "تعذر التحقق من رقم العملية. تأكد من الرقم وحاول مجددًا.",
-      code: verifyJson?.code || null,
-      upstreamStatus: verifyResp.status,
+      message: !verifyResp
+        ? "تعذر الوصول إلى مزود التحقق حالياً. حاول مرة أخرى بعد قليل."
+        : "تعذر التحقق من رقم العملية. تأكد من الرقم وحاول مجددًا.",
+      code: verifyJson?.code || (!verifyResp ? "VERIFY_UPSTREAM_UNREACHABLE" : null),
+      upstreamStatus: verifyResp?.status || null,
     });
   } catch (error: any) {
     console.error("ShamCash verify failed:", error);
