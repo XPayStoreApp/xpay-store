@@ -34,6 +34,10 @@ export function addUnitPrices(providerUnitPrice: unknown, storeProfitPerUnit: un
   return scaledToDecimal(decimalToScaled(providerUnitPrice) + decimalToScaled(storeProfitPerUnit));
 }
 
+export function subtractUnitPrices(finalUnitPrice: unknown, providerUnitPrice: unknown): string {
+  return scaledToDecimal(decimalToScaled(finalUnitPrice) - decimalToScaled(providerUnitPrice));
+}
+
 export function multiplyUnitPriceByQuantity(finalUnitPrice: unknown, quantity: unknown): string {
   const qty = decimalToScaled(quantity);
   return scaledToDecimal((decimalToScaled(finalUnitPrice) * qty) / FACTOR);

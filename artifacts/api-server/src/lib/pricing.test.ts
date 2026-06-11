@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   addUnitPrices,
   multiplyUnitPriceByQuantity,
+  subtractUnitPrices,
   parseProviderQuantityValues,
   validateRequestedQuantity,
 } from "./pricing.js";
@@ -13,6 +14,11 @@ test("unit price is provider unit price plus store profit per unit", () => {
 
 test("total price is final unit price multiplied by requested quantity", () => {
   assert.equal(multiplyUnitPriceByQuantity("0.00021", 3000), "0.63000000");
+});
+
+test("profit can be derived from final unit price without adding provider twice", () => {
+  assert.equal(subtractUnitPrices("0.00011000", "0.00010000"), "0.00001000");
+  assert.equal(addUnitPrices("0.00010000", "0.00001000"), "0.00011000");
 });
 
 test("range quantity validation respects provider minimum and admin maximum", () => {

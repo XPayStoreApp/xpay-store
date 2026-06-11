@@ -17,14 +17,16 @@ function resolveProviderUnitPrice(row: any): number {
   return asNumber(row.providerUnitPrice ?? row.basePriceUsd);
 }
 
-function resolveProfitPerUnit(row: any): number {
-  return asNumber(row.storeProfitPerUnit ?? row.priceUsd);
+function calculateFinalUnitPrice(row: any): number {
+  const explicitFinal = row.finalUnitPrice;
+  if (explicitFinal !== null && explicitFinal !== undefined && String(explicitFinal).trim() !== "") {
+    return asNumber(explicitFinal);
+  }
+  return resolveProviderUnitPrice(row) + asNumber(row.storeProfitPerUnit ?? row.priceUsd);
 }
 
-function calculateFinalUnitPrice(row: any): number {
-  const provider = resolveProviderUnitPrice(row);
-  const profit = resolveProfitPerUnit(row);
-  return provider + profit;
+function resolveProfitPerUnit(row: any): number {
+  return Math.max(0, calculateFinalUnitPrice(row) - resolveProviderUnitPrice(row));
 }
 
 function formatMoney(value: number): string {
@@ -168,9 +170,6 @@ export default function Products() {
 
     if (!payload.basePriceUsd) payload.basePriceUsd = payload.providerUnitPrice || null;
     if (!payload.providerUnitPrice) payload.providerUnitPrice = payload.basePriceUsd || null;
-
-    // Backend recalculates finalUnitPrice using decimal-safe logic to avoid stale client values.
-    delete payload.finalUnitPrice;
 
     return payload;
   };

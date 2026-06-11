@@ -29,7 +29,7 @@ import { getAdapter } from "../lib/adapter-registry";
 import { MersalAdapter } from "../lib/mersal-adapter";
 import { getTelegramConfigStatus, notifyUserDepositApproved, notifyUserDepositRejected, notifyUserOrderStatusChanged } from "../lib/telegram.js";
 import { rateLimit } from "../lib/rateLimit.js";
-import { addUnitPrices, parseProviderQuantityValues } from "../lib/pricing.js";
+import { addUnitPrices, decimalToScaled, parseProviderQuantityValues, subtractUnitPrices } from "../lib/pricing.js";
 const router: IRouter = Router();
 const EXTERNAL_CATEGORY_NAME = "External Provider";
 const EXTERNAL_CATEGORY_IMAGE = "https://placehold.co/600x400?text=External+Provider";
@@ -782,8 +782,22 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
     }
 
     const providerUnitPrice = normalized.providerUnitPrice ?? normalized.basePriceUsd ?? "0";
-    const storeProfitPerUnit = normalized.storeProfitPerUnit ?? normalized.priceUsd ?? "0";
-    normalized.finalUnitPrice = addUnitPrices(providerUnitPrice, storeProfitPerUnit);
+    const requestedFinalUnitPrice = normalized.finalUnitPrice;
+
+    if (!isBlank(requestedFinalUnitPrice)) {
+      const derivedProfit = subtractUnitPrices(requestedFinalUnitPrice, providerUnitPrice);
+      if (decimalToScaled(derivedProfit) < 0n) {
+        throw new ValidationError("finalUnitPrice must be greater than or equal to providerUnitPrice");
+      }
+      normalized.storeProfitPerUnit = derivedProfit;
+      normalized.priceUsd = derivedProfit;
+      normalized.finalUnitPrice = addUnitPrices(providerUnitPrice, derivedProfit);
+    } else {
+      const storeProfitPerUnit = normalized.storeProfitPerUnit ?? normalized.priceUsd ?? "0";
+      normalized.storeProfitPerUnit = storeProfitPerUnit;
+      normalized.priceUsd = storeProfitPerUnit;
+      normalized.finalUnitPrice = addUnitPrices(providerUnitPrice, storeProfitPerUnit);
+    }
   }
 
   if (path === "products" && "providerProductId" in normalized) {
