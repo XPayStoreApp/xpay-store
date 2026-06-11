@@ -6,6 +6,7 @@ import {
   usersTable,
   categoriesTable,
   productsTable,
+  productChangesLogTable,
   ordersTable,
   depositsTable,
   newsTable,
@@ -28,6 +29,7 @@ import { getAdapter } from "../lib/adapter-registry";
 import { MersalAdapter } from "../lib/mersal-adapter";
 import { getTelegramConfigStatus, notifyUserDepositApproved, notifyUserDepositRejected, notifyUserOrderStatusChanged } from "../lib/telegram.js";
 import { rateLimit } from "../lib/rateLimit.js";
+import { addUnitPrices, parseProviderQuantityValues } from "../lib/pricing.js";
 const router: IRouter = Router();
 const EXTERNAL_CATEGORY_NAME = "External Provider";
 const EXTERNAL_CATEGORY_IMAGE = "https://placehold.co/600x400?text=External+Provider";
@@ -518,11 +520,53 @@ function makeCrud<T extends { id: any }>(
         path,
         filterFields(req.body, opts.allowedFields),
       );
+      const id = Number(req.params.id);
+      const [before] =
+        path === "products"
+          ? ((await db.select().from(productsTable).where(eq(productsTable.id, id)).limit(1)) as any[])
+          : [];
       const [row] = await db
         .update(table)
         .set(data)
-        .where(eq(table.id, Number(req.params.id)))
+        .where(eq(table.id, id))
         .returning();
+      if (path === "products" && before && row) {
+        const logs: Array<{
+          productId: number;
+          changeType: "profit" | "max_quantity";
+          oldValue: string | null;
+          newValue: string | null;
+          providerSnapshot: Record<string, unknown>;
+          adminId?: number;
+        }> = [];
+        if ("storeProfitPerUnit" in data || "priceUsd" in data) {
+          logs.push({
+            productId: row.id,
+            changeType: "profit",
+            oldValue: String(before.storeProfitPerUnit ?? before.priceUsd ?? ""),
+            newValue: String((row as any).storeProfitPerUnit ?? (row as any).priceUsd ?? ""),
+            providerSnapshot: {
+              providerUnitPrice: (row as any).providerUnitPrice ?? (row as any).basePriceUsd ?? null,
+              minQuantity: (row as any).minQuantity ?? (row as any).minQty ?? null,
+            },
+            adminId: req.session.adminId,
+          });
+        }
+        if ("maxQuantity" in data || "maxQty" in data) {
+          logs.push({
+            productId: row.id,
+            changeType: "max_quantity",
+            oldValue: String(before.maxQuantity ?? before.maxQty ?? ""),
+            newValue: String((row as any).maxQuantity ?? (row as any).maxQty ?? ""),
+            providerSnapshot: {
+              providerUnitPrice: (row as any).providerUnitPrice ?? (row as any).basePriceUsd ?? null,
+              minQuantity: (row as any).minQuantity ?? (row as any).minQty ?? null,
+            },
+            adminId: req.session.adminId,
+          });
+        }
+        if (logs.length) await db.insert(productChangesLogTable).values(logs);
+      }
       await logActivity(
         { id: req.session.adminId, name: req.session.adminUsername },
         "update",
@@ -656,8 +700,13 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
     if ("priceUsd" in normalized) normalizeDecimalField(normalized, "priceUsd", { required: true });
     if ("priceSyp" in normalized) normalizeNumberField(normalized, "priceSyp", { required: true });
     if ("basePriceUsd" in normalized) normalizeDecimalField(normalized, "basePriceUsd", { nullable: true });
+    if ("providerUnitPrice" in normalized) normalizeDecimalField(normalized, "providerUnitPrice", { nullable: true });
+    if ("storeProfitPerUnit" in normalized) normalizeDecimalField(normalized, "storeProfitPerUnit", { required: true });
+    if ("finalUnitPrice" in normalized) normalizeDecimalField(normalized, "finalUnitPrice", { nullable: true });
     if ("minQty" in normalized) normalizeNumberField(normalized, "minQty", { nullable: true });
     if ("maxQty" in normalized) normalizeNumberField(normalized, "maxQty", { nullable: true });
+    if ("minQuantity" in normalized) normalizeNumberField(normalized, "minQuantity", { nullable: true });
+    if ("maxQuantity" in normalized) normalizeNumberField(normalized, "maxQuantity", { nullable: true });
     if ("providerId" in normalized) normalizeNumberField(normalized, "providerId", { nullable: true });
     if ("providerProductId" in normalized) {
       normalizeNumberField(normalized, "providerProductId", { nullable: true });
@@ -676,12 +725,24 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
     if (String(normalized.priceUsd).startsWith("-")) {
       throw new ValidationError("priceUsd must be zero or a positive decimal");
     }
+    if (normalized.storeProfitPerUnit != null && String(normalized.storeProfitPerUnit).startsWith("-")) {
+      throw new ValidationError("storeProfitPerUnit must be zero or a positive decimal");
+    }
     if (normalized.basePriceUsd != null && String(normalized.basePriceUsd).startsWith("-")) {
       throw new ValidationError("basePriceUsd must be zero or a positive decimal");
     }
 
     if (normalized.minQty != null && normalized.maxQty != null && normalized.minQty > normalized.maxQty) {
       throw new ValidationError("minQty must be less than or equal to maxQty");
+    }
+
+    const effectiveMinQuantity = Number(normalized.minQuantity ?? normalized.minQty ?? 1);
+    if (
+      normalized.maxQuantity != null &&
+      Number.isFinite(effectiveMinQuantity) &&
+      Number(normalized.maxQuantity) < effectiveMinQuantity
+    ) {
+      throw new ValidationError("maxQuantity must be greater than or equal to minQuantity");
     }
 
     if (normalized.categoryId != null) {
@@ -716,8 +777,13 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
         Number(normalized.providerProductId),
       );
       normalized.basePriceUsd = providerCostUsd;
+      normalized.providerUnitPrice = providerCostUsd;
       normalized.source = "provider";
     }
+
+    const providerUnitPrice = normalized.providerUnitPrice ?? normalized.basePriceUsd ?? "0";
+    const storeProfitPerUnit = normalized.storeProfitPerUnit ?? normalized.priceUsd ?? "0";
+    normalized.finalUnitPrice = addUnitPrices(providerUnitPrice, storeProfitPerUnit);
   }
 
   if (path === "products" && "providerProductId" in normalized) {
@@ -768,10 +834,17 @@ makeCrud("products", productsTable, {
     "priceUsd",
     "priceSyp",
     "basePriceUsd",
+    "providerUnitPrice",
+    "storeProfitPerUnit",
+    "finalUnitPrice",
     "productType",
     "available",
     "minQty",
     "maxQty",
+    "minQuantity",
+    "maxQuantity",
+    "quantityType",
+    "quantityValues",
     "description",
     "featured",
     "providerId",
@@ -1327,7 +1400,9 @@ const PUT_RESOURCES: Array<{ path: string; table: any; allowed: string[] }> = [
     table: productsTable,
     allowed: [
       "categoryId", "name", "image", "priceUsd", "priceSyp", "basePriceUsd",
-      "productType", "available", "minQty", "maxQty", "description", "featured",
+      "providerUnitPrice", "storeProfitPerUnit", "finalUnitPrice",
+      "productType", "available", "minQty", "maxQty", "minQuantity", "maxQuantity",
+      "quantityType", "quantityValues", "description", "featured",
       "providerId", "source", "providerProductId",
     ],
   },
@@ -1627,15 +1702,21 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
 
       // تحديث المنتج الموجود فقط – لا نقوم بإدراج جديد
       if (existingProdId) {
+        const quantityInfo = parseProviderQuantityValues((p as any).rawData?.qty_values);
         await db.execute(sql`
           UPDATE products SET
             name = ${p.name},
             image = ${p.categoryImage || "/cat-cards.png"},
             base_price_usd = ${String(p.price)},
+            provider_unit_price = ${String(p.price)},
+            final_unit_price = (${String(p.price)}::numeric + store_profit_per_unit),
             product_type = ${p.productType},
             available = ${p.available},
             min_qty = ${p.minQty ? String(p.minQty) : null},
             max_qty = ${p.maxQty ? String(p.maxQty) : null},
+            min_quantity = ${quantityInfo.minQuantity},
+            quantity_type = ${quantityInfo.quantityType}::quantity_type,
+            quantity_values = ${quantityInfo.quantityValues ? JSON.stringify(quantityInfo.quantityValues) : null}::jsonb,
             description = ${p.description || null},
             source = 'provider'
           WHERE id = ${existingProdId}

@@ -7,7 +7,8 @@
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:pricing": "tsc src/lib/pricing.ts src/lib/pricing.test.ts --module NodeNext --moduleResolution NodeNext --target ES2022 --types node --skipLibCheck --outDir ../../.tmp/pricing-tests && node --test ../../.tmp/pricing-tests/pricing.test.js"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

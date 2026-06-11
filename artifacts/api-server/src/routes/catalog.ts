@@ -9,13 +9,15 @@ import {
   ListNewsResponse,
   ListBannersResponse,
 } from "@workspace/api-zod";
+import { addUnitPrices } from "../lib/pricing.js";
 
 const router: IRouter = Router();
 
 function productRow(p: typeof productsTable.$inferSelect, categoryName: string) {
-  const markupUsd = Number(p.priceUsd || 0);
-  const baseCostUsd = p.basePriceUsd != null ? Number(p.basePriceUsd) : 0;
-  const finalPriceUsd = p.providerId ? baseCostUsd + markupUsd : markupUsd;
+  const finalPriceUsd =
+    p.finalUnitPrice != null
+      ? Number(p.finalUnitPrice)
+      : Number(addUnitPrices(p.providerUnitPrice ?? p.basePriceUsd ?? 0, p.storeProfitPerUnit ?? p.priceUsd ?? 0));
 
   return {
     id: String(p.id),
@@ -27,8 +29,8 @@ function productRow(p: typeof productsTable.$inferSelect, categoryName: string) 
     priceSyp: Number(p.priceSyp),
     productType: p.productType as "amount" | "package",
     available: p.available,
-    minQty: p.minQty != null ? Number(p.minQty) : undefined,
-    maxQty: p.maxQty != null ? Number(p.maxQty) : undefined,
+    minQty: p.minQuantity ?? (p.minQty != null ? Number(p.minQty) : undefined),
+    maxQty: p.maxQuantity ?? (p.maxQty != null ? Number(p.maxQty) : undefined),
     description: p.description ?? undefined,
     featured: p.featured,
   };

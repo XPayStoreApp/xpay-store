@@ -1,5 +1,6 @@
 import {
   pgTable,
+  pgEnum,
   text,
   serial,
   integer,
@@ -8,6 +9,9 @@ import {
   timestamp,
   jsonb,
 } from "drizzle-orm/pg-core";
+
+export const quantityTypeEnum = pgEnum("quantity_type", ["fixed", "range", "list"]);
+export const productChangeTypeEnum = pgEnum("product_change_type", ["profit", "max_quantity"]);
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -40,10 +44,17 @@ export const productsTable = pgTable("products", {
   priceUsd: numeric("price_usd", { precision: 24, scale: 12 }).notNull(),
   priceSyp: numeric("price_syp", { precision: 14, scale: 2 }).notNull(),
   basePriceUsd: numeric("base_price_usd", { precision: 24, scale: 12 }),
+  providerUnitPrice: numeric("provider_unit_price", { precision: 16, scale: 8 }),
+  storeProfitPerUnit: numeric("store_profit_per_unit", { precision: 16, scale: 8 }).notNull().default("0"),
+  finalUnitPrice: numeric("final_unit_price", { precision: 16, scale: 8 }),
   productType: text("product_type").notNull().default("package"),
   available: boolean("available").notNull().default(true),
   minQty: numeric("min_qty", { precision: 14, scale: 2 }),
   maxQty: numeric("max_qty", { precision: 14, scale: 2 }),
+  minQuantity: integer("min_quantity"),
+  maxQuantity: integer("max_quantity"),
+  quantityType: quantityTypeEnum("quantity_type").notNull().default("fixed"),
+  quantityValues: jsonb("quantity_values"),
   description: text("description"),
   featured: boolean("featured").notNull().default(false),
   providerId: integer("provider_id"),
@@ -140,6 +151,17 @@ export const adminsTable = pgTable("admins", {
   twoFactorSecret: text("two_factor_secret"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const productChangesLogTable = pgTable("product_changes_log", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => productsTable.id),
+  changeType: productChangeTypeEnum("change_type").notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  providerSnapshot: jsonb("provider_snapshot"),
+  adminId: integer("admin_id").references(() => adminsTable.id),
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
 });
 
 export const settingsTable = pgTable("settings", {

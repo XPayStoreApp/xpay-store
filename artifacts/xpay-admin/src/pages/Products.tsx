@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Crud from "../components/Crud";
 import { get } from "../lib/api";
 
@@ -6,6 +6,54 @@ const preciseDecimalPattern = /^\d+(\.\d{1,12})?$/;
 
 function cleanDecimal(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function asNumber(value: unknown): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function finalUnitPrice(row: any): number {
+  return asNumber(row.finalUnitPrice ?? asNumber(row.providerUnitPrice ?? row.basePriceUsd) + asNumber(row.storeProfitPerUnit ?? row.priceUsd));
+}
+
+function PreviewTotals({ row }: { row: any }) {
+  const min = Math.max(1, Math.floor(asNumber(row.minQuantity ?? row.minQty ?? 1)));
+  const maxRaw = row.maxQuantity ?? row.maxQty;
+  const max = maxRaw == null || maxRaw === "" ? min : Math.max(min, Math.floor(asNumber(maxRaw)));
+  const mid = Math.floor((min + max) / 2);
+  const unit = finalUnitPrice(row);
+  const rows = [
+    { label: "أقل كمية", quantity: min },
+    { label: "منتصف المدى", quantity: mid },
+    { label: "أعلى كمية", quantity: max },
+  ];
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="mb-3 text-sm font-bold text-slate-800">معاينة السعر الإجمالي</div>
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className="px-3 py-2 text-right">النوع</th>
+              <th className="px-3 py-2 text-right">الكمية</th>
+              <th className="px-3 py-2 text-right">الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((item) => (
+              <tr key={item.label} className="border-t border-slate-100">
+                <td className="px-3 py-2">{item.label}</td>
+                <td className="px-3 py-2 font-mono">{item.quantity}</td>
+                <td className="px-3 py-2 font-mono">${(unit * item.quantity).toFixed(8)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 export default function Products() {
@@ -41,11 +89,10 @@ export default function Products() {
         `المصدر المحلي: ${result.product?.source ?? "-"}`,
         `موجود لدى المزود: ${result.existsAtProvider ? "نعم" : "لا"}`,
         `المزود: ${result.provider?.name ?? "-"}`,
-        `رابط API: ${result.provider?.apiUrl ?? "-"}`,
         `تكلفة المزود الحالية: ${result.remote?.priceUsd ?? "-"}`,
         `تكلفة المزود المخزنة: ${result.product?.localBaseCostUsd ?? "-"}`,
-        `ربح لوحة التحكم: ${result.product?.localMarkupUsd ?? "-"}`,
-        `سعر البيع النهائي: ${result.product?.localFinalPriceUsd ?? "-"}`,
+        `ربح المتجر: ${result.product?.localMarkupUsd ?? "-"}`,
+        `سعر الوحدة النهائي: ${result.product?.localFinalPriceUsd ?? "-"}`,
         `رسالة التحقق: ${result.message ?? "-"}`,
       ];
       alert(lines.join("\n"));
@@ -58,20 +105,27 @@ export default function Products() {
 
   const normalizeProductPayload = (data: any) => {
     const payload = { ...data };
-    payload.priceUsd = cleanDecimal(payload.priceUsd);
+    payload.storeProfitPerUnit = cleanDecimal(payload.storeProfitPerUnit ?? payload.priceUsd);
+    payload.priceUsd = payload.storeProfitPerUnit;
     payload.basePriceUsd = cleanDecimal(payload.basePriceUsd);
+    payload.providerUnitPrice = cleanDecimal(payload.providerUnitPrice ?? payload.basePriceUsd);
 
-    if (!preciseDecimalPattern.test(payload.priceUsd)) {
-      throw new Error("ربح المتجر بالدولار يجب أن يكون رقمًا موجبًا ويدعم حتى 12 رقمًا بعد الفاصلة.");
+    if (!preciseDecimalPattern.test(payload.storeProfitPerUnit)) {
+      throw new Error("ربح المتجر لكل وحدة يجب أن يكون رقمًا موجبًا ويدعم حتى 12 رقمًا بعد الفاصلة.");
     }
 
-    if (payload.basePriceUsd && !preciseDecimalPattern.test(payload.basePriceUsd)) {
-      throw new Error("تكلفة المزود يجب أن تكون رقمًا موجبًا ويدعم حتى 12 رقمًا بعد الفاصلة.");
+    if (payload.providerUnitPrice && !preciseDecimalPattern.test(payload.providerUnitPrice)) {
+      throw new Error("سعر المزود يجب أن يكون رقمًا موجبًا.");
     }
 
-    if (!payload.basePriceUsd) {
-      payload.basePriceUsd = null;
+    const min = asNumber(payload.minQuantity ?? payload.minQty ?? 1);
+    const max = payload.maxQuantity ?? payload.maxQty;
+    if (max != null && max !== "" && asNumber(max) < min) {
+      throw new Error("أعلى كمية يجب أن تكون أكبر من أو تساوي أقل كمية.");
     }
+
+    if (!payload.basePriceUsd) payload.basePriceUsd = payload.providerUnitPrice || null;
+    if (!payload.providerUnitPrice) payload.providerUnitPrice = payload.basePriceUsd || null;
 
     return payload;
   };
@@ -81,6 +135,7 @@ export default function Products() {
       resource="products"
       title="المنتجات"
       beforeSubmit={normalizeProductPayload}
+      renderFormExtra={(row) => <PreviewTotals row={row} />}
       rowExtras={(row) => (
         <button
           onClick={() => verifyProviderProduct(row)}
@@ -102,29 +157,57 @@ export default function Products() {
         { name: "name", label: "اسم المنتج", type: "text", required: true },
         { name: "image", label: "رابط الصورة", type: "text", required: true },
         {
-          name: "priceUsd",
-          label: "ربح المتجر بالدولار (USD)",
+          name: "providerUnitPrice",
+          label: "سعر الوحدة من المزود",
           type: "text",
-          placeholder: "مثال: 0.000000000021 أو 0.1",
+          readOnly: true,
+          helperText: "يتم تحديثه من API المزود ولا يعدل يدويًا.",
+        },
+        {
+          name: "storeProfitPerUnit",
+          label: "ربح المتجر لكل وحدة",
+          type: "text",
+          placeholder: "مثال: 0.00011",
           required: true,
-          helperText:
-            "هذا الرقم يدوي بالكامل ولا يأخذه المزود. للمنتجات المرتبطة بمزود: سعر البيع النهائي = تكلفة المزود الحالية + هذا الربح.",
+          helperText: "هذا هو الربح اليدوي لكل وحدة. سعر الوحدة النهائي = سعر المزود + هذا الربح.",
+        },
+        {
+          name: "finalUnitPrice",
+          label: "سعر الوحدة النهائي",
+          type: "text",
+          readOnly: true,
+          helperText: "يحسب تلقائيًا: سعر المزود + ربح المتجر.",
+        },
+        {
+          name: "minQuantity",
+          label: "أقل كمية من المزود",
+          type: "number",
+          readOnly: true,
+        },
+        {
+          name: "quantityType",
+          label: "نوع الكمية",
+          type: "select",
+          readOnly: true,
+          options: [
+            { value: "fixed", label: "ثابتة" },
+            { value: "range", label: "مدى" },
+            { value: "list", label: "قائمة" },
+          ],
+        },
+        {
+          name: "maxQuantity",
+          label: "أعلى كمية مسموحة",
+          type: "number",
+          step: "1",
+          helperText: "يحدده الأدمن ويجب أن يكون أكبر من أو يساوي أقل كمية.",
         },
         {
           name: "priceSyp",
-          label: "سعر الليرة للعرض الداخلي فقط (SYP)",
+          label: "سعر الليرة للعرض الداخلي فقط",
           type: "number",
           step: "0.01",
           required: true,
-          helperText: "لا يظهر للمستخدم في المتجر. اتركه 0 إذا كان المنتج يعتمد على الدولار فقط.",
-        },
-        {
-          name: "basePriceUsd",
-          label: "تكلفة المزود بالدولار (تلقائي)",
-          type: "text",
-          placeholder: "يتم تحديثها تلقائيًا من API المزود",
-          helperText:
-            "هذا الحقل هو تكلفة المزود فقط. عند اختيار مزود ومعرف منتج سيتم جلبه وتحديثه تلقائيًا، ولا يغيّر ربح المتجر.",
         },
         {
           name: "productType",
@@ -137,8 +220,6 @@ export default function Products() {
           default: "package",
         },
         { name: "available", label: "متاح", type: "boolean", default: true },
-        { name: "minQty", label: "أقل كمية", type: "number", step: "0.01" },
-        { name: "maxQty", label: "أقصى كمية", type: "number", step: "0.01" },
         { name: "description", label: "الوصف", type: "textarea" },
         { name: "featured", label: "مميز", type: "boolean", default: false },
         {
@@ -149,6 +230,10 @@ export default function Products() {
         },
         { name: "providerProductId", label: "معرف المنتج لدى المزود", type: "number" },
         { name: "source", label: "المصدر", type: "text", default: "manual" },
+        { name: "priceUsd", label: "ربح قديم للتوافق", type: "text", hideInTable: true },
+        { name: "basePriceUsd", label: "تكلفة مزود قديمة للتوافق", type: "text", hideInTable: true },
+        { name: "minQty", label: "أقل كمية قديمة للتوافق", type: "number", hideInTable: true },
+        { name: "maxQty", label: "أعلى كمية قديمة للتوافق", type: "number", hideInTable: true },
       ]}
     />
   );

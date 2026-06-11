@@ -1,4 +1,5 @@
 import { ProviderAdapter, ProviderProduct, ProviderOrderResult, ProviderCheckResult } from "./provider-adapters";
+import { parseProviderQuantityValues } from "./pricing.js";
 
 const DEFAULT_API_URL = "https://api.mersal-card.com";
 
@@ -24,20 +25,25 @@ export class MersalAdapter implements ProviderAdapter {
     if (!res.ok) throw new Error(`Mersal products error: ${res.status}`);
     
     const data = await res.json() as any[];
-    return data.map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      basePrice: p.base_price,
-      categoryName: p.category_name,
-      categoryImage: p.category_img,
-      available: p.available,
-      minQty: p.qty_values?.min,
-      maxQty: p.qty_values?.max,
-      productType: p.product_type,
-      description: p.params?.join(", "),
-      rawData: p,
-    }));
+    return data.map((p: any) => {
+      const quantityInfo = parseProviderQuantityValues(p.qty_values);
+      return {
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        basePrice: p.base_price,
+        categoryName: p.category_name,
+        categoryImage: p.category_img,
+        available: p.available,
+        minQty: quantityInfo.minQuantity,
+        maxQty: quantityInfo.maxQuantity ?? undefined,
+        quantityType: quantityInfo.quantityType,
+        quantityValues: quantityInfo.quantityValues ?? null,
+        productType: p.product_type,
+        description: p.params?.join(", "),
+        rawData: p,
+      };
+    });
   }
 
   async placeOrder(

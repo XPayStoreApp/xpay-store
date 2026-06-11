@@ -38,6 +38,8 @@ export interface ProviderAdapter {
     available: boolean;
     minQty?: number;
     maxQty?: number;
+    quantityType?: 'fixed' | 'range' | 'list';
+    quantityValues?: number[] | null;
     productType: 'amount' | 'package';
     description?: string;
     rawData?: any; // لحفظ البيانات الأصلية

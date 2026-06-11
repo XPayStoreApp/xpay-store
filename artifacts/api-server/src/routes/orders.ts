@@ -11,6 +11,12 @@ import {
 } from "@workspace/api-zod";
 import { getAdapter } from "../lib/adapter-registry";
 import { getOrCreateCurrentUser, getOrCreateCurrentUserStrict } from "../lib/currentUser.js";
+import {
+  addUnitPrices,
+  multiplyUnitPriceByQuantity,
+  validateRequestedQuantity,
+  type QuantityType,
+} from "../lib/pricing.js";
 import { notifyUserOrderCreated, notifyUserOrderStatusChanged } from "../lib/telegram.js";
 
 const router: IRouter = Router();
@@ -53,6 +59,38 @@ function multiplyDecimalByQuantity(unitPrice: unknown, quantity: unknown): strin
   const priceScaled = decimalToScaledBigInt(unitPrice);
   const quantityScaled = decimalToScaledBigInt(quantity);
   return scaledBigIntToDecimalString((priceScaled * quantityScaled) / USD_FACTOR);
+}
+
+function resolveProductQuantityModel(product: typeof productsTable.$inferSelect): {
+  quantityType: QuantityType;
+  minQuantity: number;
+  maxQuantity: number | null;
+  quantityValues: unknown;
+} {
+  const oldMin = product.minQty != null ? Number(product.minQty) : 1;
+  const oldMax = product.maxQty != null ? Number(product.maxQty) : null;
+  const minQuantity = product.minQuantity ?? (Number.isFinite(oldMin) && oldMin > 0 ? Math.floor(oldMin) : 1);
+  const maxQuantity = product.maxQuantity ?? (oldMax != null && Number.isFinite(oldMax) ? Math.floor(oldMax) : null);
+  let quantityType = (product.quantityType || "fixed") as QuantityType;
+
+  if (quantityType === "fixed" && maxQuantity != null && maxQuantity > minQuantity) {
+    quantityType = "range";
+  }
+
+  return {
+    quantityType,
+    minQuantity,
+    maxQuantity,
+    quantityValues: product.quantityValues,
+  };
+}
+
+function resolveFinalUnitPrice(product: typeof productsTable.$inferSelect): string {
+  if (product.finalUnitPrice != null) return String(product.finalUnitPrice);
+
+  const providerUnitPrice = product.providerUnitPrice ?? product.basePriceUsd ?? "0";
+  const storeProfitPerUnit = product.storeProfitPerUnit ?? product.priceUsd ?? "0";
+  return addUnitPrices(providerUnitPrice, storeProfitPerUnit);
 }
 
 function decimalGte(a: unknown, b: unknown): boolean {
@@ -311,8 +349,13 @@ router.post("/orders", async (req, res) => {
       return;
     }
 
-    if (product.minQty && body.quantity < Number(product.minQty)) {
-      res.status(400).json({ error: `الحد الأدنى هو ${Number(product.minQty)}` });
+    const quantityModel = resolveProductQuantityModel(product);
+    const quantityValidation = validateRequestedQuantity({
+      ...quantityModel,
+      requestedQuantity: body.quantity,
+    });
+    if (!quantityValidation.ok) {
+      res.status(400).json({ error: quantityValidation.message, code: quantityValidation.code });
       return;
     }
 
@@ -360,10 +403,7 @@ router.post("/orders", async (req, res) => {
           liveProviderUnitPrice = String(providerProduct.price || "0");
           providerAvailable = !!providerProduct.available;
 
-          if (providerProduct.minQty != null && body.quantity < Number(providerProduct.minQty)) {
-            res.status(400).json({ error: `الحد الأدنى لدى المزود هو ${Number(providerProduct.minQty)}` });
-            return;
-          }
+          // Quantity validation is based on the synchronized DB snapshot to avoid mid-order rule drift.
         }
       } catch (error) {
         console.error("Provider live price lookup failed:", error);
@@ -375,13 +415,11 @@ router.post("/orders", async (req, res) => {
       }
     }
 
-    const dashboardMarkupUsd = String(product.priceUsd);
-    const storedBaseCostUsd = product.basePriceUsd != null ? String(product.basePriceUsd) : "0";
+    const dashboardMarkupUsd = String(product.storeProfitPerUnit ?? product.priceUsd);
+    const storedBaseCostUsd = String(product.providerUnitPrice ?? product.basePriceUsd ?? "0");
     const providerUnitPriceUsd = product.providerId ? liveProviderUnitPrice || storedBaseCostUsd : "0";
-    const finalUnitPriceUsd = product.providerId
-      ? addDecimalStrings(providerUnitPriceUsd, dashboardMarkupUsd)
-      : dashboardMarkupUsd;
-    const totalUsd = multiplyDecimalByQuantity(finalUnitPriceUsd, body.quantity);
+    const finalUnitPriceUsd = resolveFinalUnitPrice(product);
+    const totalUsd = multiplyUnitPriceByQuantity(finalUnitPriceUsd, body.quantity);
     const totalSyp = Number(product.priceSyp) * body.quantity;
     const balanceBeforeUsd = String(user.balanceUsd);
 

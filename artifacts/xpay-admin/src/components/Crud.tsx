@@ -15,6 +15,7 @@ export interface FieldDef {
   step?: string;
   placeholder?: string;
   helperText?: string;
+  readOnly?: boolean;
 }
 
 export interface CrudConfig {
@@ -23,9 +24,10 @@ export interface CrudConfig {
   fields: FieldDef[];
   rowExtras?: (row: any) => React.ReactNode;
   beforeSubmit?: (data: any) => any;
+  renderFormExtra?: (data: any) => React.ReactNode;
 }
 
-export default function Crud({ resource, title, fields, rowExtras, beforeSubmit }: CrudConfig) {
+export default function Crud({ resource, title, fields, rowExtras, beforeSubmit, renderFormExtra }: CrudConfig) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<any | null>(null);
@@ -222,6 +224,7 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit 
           initial={editing}
           onClose={() => setEditing(null)}
           onSave={handleSave}
+          renderExtra={renderFormExtra}
         />
       )}
     </div>
@@ -260,12 +263,14 @@ export function FormModal({
   initial,
   onClose,
   onSave,
+  renderExtra,
 }: {
   title: string;
   fields: FieldDef[];
   initial: any;
   onClose: () => void;
   onSave: (data: any) => Promise<void>;
+  renderExtra?: (data: any) => React.ReactNode;
 }) {
   const [data, setData] = useState<any>(initial);
   const [saving, setSaving] = useState(false);
@@ -302,11 +307,14 @@ export function FormModal({
               <FieldInput
                 field={f}
                 value={data[f.name]}
-                onChange={(v) => setData({ ...data, [f.name]: v })}
+                onChange={(v) => {
+                  if (!f.readOnly) setData({ ...data, [f.name]: v });
+                }}
               />
               {f.helperText && <p className="mt-1 text-xs leading-5 text-slate-500">{f.helperText}</p>}
             </div>
           ))}
+          {renderExtra?.(data)}
           {err && <div className="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm">{err}</div>}
           <div className="flex items-center gap-2 pt-2">
             <button
@@ -349,6 +357,7 @@ function FieldInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={field.placeholder}
         required={field.required}
+        readOnly={field.readOnly}
       />
     );
   }
@@ -359,6 +368,7 @@ function FieldInput({
           type="checkbox"
           checked={!!value}
           onChange={(e) => onChange(e.target.checked)}
+          disabled={field.readOnly}
           className="w-5 h-5 accent-brand-600"
         />
         <span className="text-sm text-slate-600">مفعل</span>
@@ -372,6 +382,7 @@ function FieldInput({
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         required={field.required}
+        disabled={field.readOnly}
       >
         <option value="">- اختر -</option>
         {field.options?.map((o) => (
@@ -392,6 +403,7 @@ function FieldInput({
         onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
         placeholder={field.placeholder}
         required={field.required}
+        readOnly={field.readOnly}
       />
     );
   }
@@ -400,9 +412,10 @@ function FieldInput({
       type="text"
       className={cls}
       value={value ?? ""}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={field.placeholder}
-      required={field.required}
-    />
+    onChange={(e) => onChange(e.target.value)}
+    placeholder={field.placeholder}
+    required={field.required}
+    readOnly={field.readOnly}
+  />
   );
 }
