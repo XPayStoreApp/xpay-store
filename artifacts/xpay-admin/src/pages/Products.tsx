@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import Crud from "../components/Crud";
 import { get } from "../lib/api";
 
@@ -30,7 +30,7 @@ function resolveProfitPerUnit(row: any): number {
 }
 
 function formatMoney(value: number): string {
-  return value.toFixed(8).replace(/\.0+$/, ".00000000");
+  return value.toFixed(8);
 }
 
 function PreviewTotals({ row }: { row: any }) {
@@ -39,8 +39,8 @@ function PreviewTotals({ row }: { row: any }) {
   const max = maxRaw == null || maxRaw === "" ? min : Math.max(min, Math.floor(asNumber(maxRaw)));
   const mid = Math.floor((min + max) / 2);
   const providerUnit = resolveProviderUnitPrice(row);
-  const profitUnit = resolveProfitPerUnit(row);
   const finalUnit = calculateFinalUnitPrice(row);
+  const profitUnit = resolveProfitPerUnit(row);
   const rows = [
     { label: "أقل كمية", quantity: min },
     { label: "منتصف المدى", quantity: mid },
@@ -56,12 +56,12 @@ function PreviewTotals({ row }: { row: any }) {
           <div className="font-mono font-bold">${formatMoney(providerUnit)}</div>
         </div>
         <div className="rounded-lg bg-white p-3 shadow-sm">
-          <div className="text-slate-500">الربح الإضافي للوحدة</div>
-          <div className="font-mono font-bold">${formatMoney(profitUnit)}</div>
-        </div>
-        <div className="rounded-lg bg-white p-3 shadow-sm">
           <div className="text-slate-500">سعر البيع النهائي للوحدة</div>
           <div className="font-mono font-bold text-blue-700">${formatMoney(finalUnit)}</div>
+        </div>
+        <div className="rounded-lg bg-white p-3 shadow-sm">
+          <div className="text-slate-500">الربح المحسوب للوحدة</div>
+          <div className="font-mono font-bold">${formatMoney(profitUnit)}</div>
         </div>
       </div>
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -85,7 +85,7 @@ function PreviewTotals({ row }: { row: any }) {
         </table>
       </div>
       <p className="text-xs leading-6 text-slate-500">
-        ملاحظة: خانة الربح هي مبلغ إضافي فوق سعر المزود. إذا كان سعر المزود 0.00010000 وأدخلت ربح 0.00001000، يصبح سعر البيع النهائي 0.00011000.
+        عدل سعر البيع النهائي مباشرة. الخادم سيحسب الربح تلقائيا = سعر البيع النهائي - سعر المزود، ولن يضيف سعر المزود مرة ثانية.
       </p>
     </div>
   );
@@ -135,7 +135,7 @@ export default function Products() {
         `المزود: ${result.provider?.name ?? "-"}`,
         `سعر المزود الحالي: ${result.remote?.priceUsd ?? "-"}`,
         `سعر المزود المخزن: ${result.product?.localBaseCostUsd ?? "-"}`,
-        `الربح الإضافي للوحدة: ${result.product?.localMarkupUsd ?? "-"}`,
+        `الربح المحسوب للوحدة: ${result.product?.localMarkupUsd ?? "-"}`,
         `سعر البيع النهائي للوحدة: ${result.product?.localFinalPriceUsd ?? "-"}`,
         `رسالة التحقق: ${result.message ?? "-"}`,
       ];
@@ -149,18 +149,26 @@ export default function Products() {
 
   const normalizeProductPayload = (data: any) => {
     const payload = { ...data };
-    payload.storeProfitPerUnit = cleanDecimal(payload.storeProfitPerUnit ?? payload.priceUsd ?? "0");
-    payload.priceUsd = payload.storeProfitPerUnit;
     payload.basePriceUsd = cleanDecimal(payload.basePriceUsd);
     payload.providerUnitPrice = cleanDecimal(payload.providerUnitPrice ?? payload.basePriceUsd);
+    payload.finalUnitPrice = cleanDecimal(payload.finalUnitPrice);
 
-    if (!preciseDecimalPattern.test(payload.storeProfitPerUnit)) {
-      throw new Error("ربح المتجر لكل وحدة يجب أن يكون رقماً موجباً ويدعم حتى 12 رقماً بعد الفاصلة.");
+    if (!preciseDecimalPattern.test(payload.finalUnitPrice)) {
+      throw new Error("سعر البيع النهائي لكل وحدة يجب أن يكون رقما موجبا ويدعم حتى 12 رقما بعد الفاصلة.");
     }
 
     if (payload.providerUnitPrice && !preciseDecimalPattern.test(payload.providerUnitPrice)) {
-      throw new Error("سعر المزود يجب أن يكون رقماً موجباً.");
+      throw new Error("سعر المزود يجب أن يكون رقما موجبا.");
     }
+
+    const providerUnit = asNumber(payload.providerUnitPrice || payload.basePriceUsd || 0);
+    const finalUnit = asNumber(payload.finalUnitPrice);
+    if (finalUnit < providerUnit) {
+      throw new Error("سعر البيع النهائي يجب أن يكون أكبر من أو يساوي سعر المزود.");
+    }
+
+    payload.storeProfitPerUnit = (finalUnit - providerUnit).toFixed(8);
+    payload.priceUsd = payload.storeProfitPerUnit;
 
     const min = asNumber(payload.minQuantity ?? payload.minQty ?? 1);
     const max = payload.maxQuantity ?? payload.maxQty;
@@ -205,22 +213,22 @@ export default function Products() {
           label: "سعر المزود لكل وحدة",
           type: "text",
           readOnly: true,
-          helperText: "يتم تحديثه من API المزود ولا يعدل يدوياً.",
-        },
-        {
-          name: "storeProfitPerUnit",
-          label: "الربح الإضافي لكل وحدة",
-          type: "text",
-          placeholder: "مثال: 0.00001",
-          required: true,
-          helperText: "هذا ليس سعر البيع النهائي. هذا هو الربح الذي يضاف فوق سعر المزود لكل وحدة.",
+          helperText: "يتم تحديثه من API المزود ولا يعدل يدويا.",
         },
         {
           name: "finalUnitPrice",
           label: "سعر البيع النهائي لكل وحدة",
           type: "text",
+          placeholder: "مثال: 0.00011000",
+          required: true,
+          helperText: "اكتب هنا السعر النهائي الذي سيدفعه العميل لكل وحدة. لا تتم إضافة سعر المزود فوقه مرة أخرى.",
+        },
+        {
+          name: "storeProfitPerUnit",
+          label: "الربح المحسوب لكل وحدة",
+          type: "text",
           readOnly: true,
-          helperText: "يحسب تلقائياً: سعر المزود + الربح الإضافي. عند الحفظ يعاد حسابه في الخادم لمنع أي خطأ.",
+          helperText: "يحسب تلقائيا من سعر البيع النهائي ناقص سعر المزود ويحفظ للتوافق الداخلي.",
         },
         {
           name: "minQuantity",
