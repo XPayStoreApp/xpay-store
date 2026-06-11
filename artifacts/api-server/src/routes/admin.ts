@@ -1862,9 +1862,15 @@ router.get("/admin/products/:id/provider-status", requireAdmin, async (req, res)
     const remoteProducts = await adapter.fetchProducts(provider.apiKey!, provider.apiUrl || undefined);
     const remote = remoteProducts.find((p) => Number(p.id) === Number(product.providerProductId));
     const remotePrice = remote?.price != null ? Number(remote.price) : null;
-    const localMarkup = Number(product.priceUsd);
-    const localBaseCost = product.basePriceUsd != null ? Number(product.basePriceUsd) : null;
-    const localFinalPrice = localBaseCost != null ? localBaseCost + localMarkup : localMarkup;
+    const localMarkup = Number((product as any).storeProfitPerUnit ?? product.priceUsd ?? 0);
+    const localBaseCostRaw = (product as any).providerUnitPrice ?? product.basePriceUsd;
+    const localBaseCost = localBaseCostRaw != null ? Number(localBaseCostRaw) : null;
+    const localFinalPriceRaw = (product as any).finalUnitPrice;
+    const localFinalPrice = localFinalPriceRaw != null
+      ? Number(localFinalPriceRaw)
+      : localBaseCost != null
+        ? localBaseCost + localMarkup
+        : localMarkup;
 
     res.json({
       ok: true,

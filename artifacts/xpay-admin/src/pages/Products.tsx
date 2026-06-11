@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Crud from "../components/Crud";
 import { get } from "../lib/api";
 
@@ -13,8 +13,22 @@ function asNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function finalUnitPrice(row: any): number {
-  return asNumber(row.finalUnitPrice ?? asNumber(row.providerUnitPrice ?? row.basePriceUsd) + asNumber(row.storeProfitPerUnit ?? row.priceUsd));
+function resolveProviderUnitPrice(row: any): number {
+  return asNumber(row.providerUnitPrice ?? row.basePriceUsd);
+}
+
+function resolveProfitPerUnit(row: any): number {
+  return asNumber(row.storeProfitPerUnit ?? row.priceUsd);
+}
+
+function calculateFinalUnitPrice(row: any): number {
+  const provider = resolveProviderUnitPrice(row);
+  const profit = resolveProfitPerUnit(row);
+  return provider + profit;
+}
+
+function formatMoney(value: number): string {
+  return value.toFixed(8).replace(/\.0+$/, ".00000000");
 }
 
 function PreviewTotals({ row }: { row: any }) {
@@ -22,7 +36,9 @@ function PreviewTotals({ row }: { row: any }) {
   const maxRaw = row.maxQuantity ?? row.maxQty;
   const max = maxRaw == null || maxRaw === "" ? min : Math.max(min, Math.floor(asNumber(maxRaw)));
   const mid = Math.floor((min + max) / 2);
-  const unit = finalUnitPrice(row);
+  const providerUnit = resolveProviderUnitPrice(row);
+  const profitUnit = resolveProfitPerUnit(row);
+  const finalUnit = calculateFinalUnitPrice(row);
   const rows = [
     { label: "أقل كمية", quantity: min },
     { label: "منتصف المدى", quantity: mid },
@@ -30,15 +46,29 @@ function PreviewTotals({ row }: { row: any }) {
   ];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <div className="mb-3 text-sm font-bold text-slate-800">معاينة السعر الإجمالي</div>
+    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-bold text-slate-800">معاينة السعر قبل الحفظ</div>
+      <div className="grid gap-2 text-xs text-slate-700 sm:grid-cols-3">
+        <div className="rounded-lg bg-white p-3 shadow-sm">
+          <div className="text-slate-500">سعر المزود للوحدة</div>
+          <div className="font-mono font-bold">${formatMoney(providerUnit)}</div>
+        </div>
+        <div className="rounded-lg bg-white p-3 shadow-sm">
+          <div className="text-slate-500">الربح الإضافي للوحدة</div>
+          <div className="font-mono font-bold">${formatMoney(profitUnit)}</div>
+        </div>
+        <div className="rounded-lg bg-white p-3 shadow-sm">
+          <div className="text-slate-500">سعر البيع النهائي للوحدة</div>
+          <div className="font-mono font-bold text-blue-700">${formatMoney(finalUnit)}</div>
+        </div>
+      </div>
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
               <th className="px-3 py-2 text-right">النوع</th>
               <th className="px-3 py-2 text-right">الكمية</th>
-              <th className="px-3 py-2 text-right">الإجمالي</th>
+              <th className="px-3 py-2 text-right">السعر الإجمالي</th>
             </tr>
           </thead>
           <tbody>
@@ -46,12 +76,15 @@ function PreviewTotals({ row }: { row: any }) {
               <tr key={item.label} className="border-t border-slate-100">
                 <td className="px-3 py-2">{item.label}</td>
                 <td className="px-3 py-2 font-mono">{item.quantity}</td>
-                <td className="px-3 py-2 font-mono">${(unit * item.quantity).toFixed(8)}</td>
+                <td className="px-3 py-2 font-mono">${formatMoney(finalUnit * item.quantity)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <p className="text-xs leading-6 text-slate-500">
+        ملاحظة: خانة الربح هي مبلغ إضافي فوق سعر المزود. إذا كان سعر المزود 0.00010000 وأدخلت ربح 0.00001000، يصبح سعر البيع النهائي 0.00011000.
+      </p>
     </div>
   );
 }
@@ -79,6 +112,15 @@ export default function Products() {
     fetchRefs();
   }, []);
 
+  const categoryOptions = useMemo(
+    () => (categories.length > 0 ? categories : [{ value: "", label: "لا توجد فئات" }]),
+    [categories],
+  );
+  const providerOptions = useMemo(
+    () => (providers.length > 0 ? providers : [{ value: "", label: "لا يوجد مزودون" }]),
+    [providers],
+  );
+
   const verifyProviderProduct = async (row: any) => {
     try {
       setVerifyingId(row.id);
@@ -89,10 +131,10 @@ export default function Products() {
         `المصدر المحلي: ${result.product?.source ?? "-"}`,
         `موجود لدى المزود: ${result.existsAtProvider ? "نعم" : "لا"}`,
         `المزود: ${result.provider?.name ?? "-"}`,
-        `تكلفة المزود الحالية: ${result.remote?.priceUsd ?? "-"}`,
-        `تكلفة المزود المخزنة: ${result.product?.localBaseCostUsd ?? "-"}`,
-        `ربح المتجر: ${result.product?.localMarkupUsd ?? "-"}`,
-        `سعر الوحدة النهائي: ${result.product?.localFinalPriceUsd ?? "-"}`,
+        `سعر المزود الحالي: ${result.remote?.priceUsd ?? "-"}`,
+        `سعر المزود المخزن: ${result.product?.localBaseCostUsd ?? "-"}`,
+        `الربح الإضافي للوحدة: ${result.product?.localMarkupUsd ?? "-"}`,
+        `سعر البيع النهائي للوحدة: ${result.product?.localFinalPriceUsd ?? "-"}`,
         `رسالة التحقق: ${result.message ?? "-"}`,
       ];
       alert(lines.join("\n"));
@@ -105,17 +147,17 @@ export default function Products() {
 
   const normalizeProductPayload = (data: any) => {
     const payload = { ...data };
-    payload.storeProfitPerUnit = cleanDecimal(payload.storeProfitPerUnit ?? payload.priceUsd);
+    payload.storeProfitPerUnit = cleanDecimal(payload.storeProfitPerUnit ?? payload.priceUsd ?? "0");
     payload.priceUsd = payload.storeProfitPerUnit;
     payload.basePriceUsd = cleanDecimal(payload.basePriceUsd);
     payload.providerUnitPrice = cleanDecimal(payload.providerUnitPrice ?? payload.basePriceUsd);
 
     if (!preciseDecimalPattern.test(payload.storeProfitPerUnit)) {
-      throw new Error("ربح المتجر لكل وحدة يجب أن يكون رقمًا موجبًا ويدعم حتى 12 رقمًا بعد الفاصلة.");
+      throw new Error("ربح المتجر لكل وحدة يجب أن يكون رقماً موجباً ويدعم حتى 12 رقماً بعد الفاصلة.");
     }
 
     if (payload.providerUnitPrice && !preciseDecimalPattern.test(payload.providerUnitPrice)) {
-      throw new Error("سعر المزود يجب أن يكون رقمًا موجبًا.");
+      throw new Error("سعر المزود يجب أن يكون رقماً موجباً.");
     }
 
     const min = asNumber(payload.minQuantity ?? payload.minQty ?? 1);
@@ -126,6 +168,9 @@ export default function Products() {
 
     if (!payload.basePriceUsd) payload.basePriceUsd = payload.providerUnitPrice || null;
     if (!payload.providerUnitPrice) payload.providerUnitPrice = payload.basePriceUsd || null;
+
+    // Backend recalculates finalUnitPrice using decimal-safe logic to avoid stale client values.
+    delete payload.finalUnitPrice;
 
     return payload;
   };
@@ -152,31 +197,31 @@ export default function Products() {
           label: "الفئة",
           type: "select",
           required: false,
-          options: categories.length > 0 ? categories : [{ value: "", label: "لا توجد فئات" }],
+          options: categoryOptions,
         },
         { name: "name", label: "اسم المنتج", type: "text", required: true },
         { name: "image", label: "رابط الصورة", type: "text", required: true },
         {
           name: "providerUnitPrice",
-          label: "سعر الوحدة من المزود",
+          label: "سعر المزود لكل وحدة",
           type: "text",
           readOnly: true,
-          helperText: "يتم تحديثه من API المزود ولا يعدل يدويًا.",
+          helperText: "يتم تحديثه من API المزود ولا يعدل يدوياً.",
         },
         {
           name: "storeProfitPerUnit",
-          label: "ربح المتجر لكل وحدة",
+          label: "الربح الإضافي لكل وحدة",
           type: "text",
-          placeholder: "مثال: 0.00011",
+          placeholder: "مثال: 0.00001",
           required: true,
-          helperText: "هذا هو الربح اليدوي لكل وحدة. سعر الوحدة النهائي = سعر المزود + هذا الربح.",
+          helperText: "هذا ليس سعر البيع النهائي. هذا هو الربح الذي يضاف فوق سعر المزود لكل وحدة.",
         },
         {
           name: "finalUnitPrice",
-          label: "سعر الوحدة النهائي",
+          label: "سعر البيع النهائي لكل وحدة",
           type: "text",
           readOnly: true,
-          helperText: "يحسب تلقائيًا: سعر المزود + ربح المتجر.",
+          helperText: "يحسب تلقائياً: سعر المزود + الربح الإضافي. عند الحفظ يعاد حسابه في الخادم لمنع أي خطأ.",
         },
         {
           name: "minQuantity",
@@ -226,7 +271,7 @@ export default function Products() {
           name: "providerId",
           label: "المزود",
           type: "select",
-          options: providers.length > 0 ? providers : [{ value: "", label: "لا يوجد مزودون" }],
+          options: providerOptions,
         },
         { name: "providerProductId", label: "معرف المنتج لدى المزود", type: "number" },
         { name: "source", label: "المصدر", type: "text", default: "manual" },
