@@ -1719,11 +1719,8 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
         const quantityInfo = parseProviderQuantityValues((p as any).rawData?.qty_values);
         await db.execute(sql`
           UPDATE products SET
-            name = ${p.name},
-            image = ${p.categoryImage || "/cat-cards.png"},
             base_price_usd = ${String(p.price)},
             provider_unit_price = ${String(p.price)},
-            final_unit_price = (${String(p.price)}::numeric + store_profit_per_unit),
             product_type = ${p.productType},
             available = ${p.available},
             min_qty = ${p.minQty ? String(p.minQty) : null},
@@ -1731,7 +1728,6 @@ router.post("/admin/providers/:id/sync", requireAdmin, async (req, res) => {
             min_quantity = ${quantityInfo.minQuantity},
             quantity_type = ${quantityInfo.quantityType}::quantity_type,
             quantity_values = ${quantityInfo.quantityValues ? JSON.stringify(quantityInfo.quantityValues) : null}::jsonb,
-            description = ${p.description || null},
             source = 'provider'
           WHERE id = ${existingProdId}
         `);
