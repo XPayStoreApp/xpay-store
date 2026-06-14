@@ -51,6 +51,7 @@ export interface Product {
   categoryName: string;
   image: string;
   priceUsd: number;
+  minTotalUsd?: number;
   priceSyp: number;
   productType: ProductProductType;
   available: boolean;

@@ -18,6 +18,8 @@ function productRow(p: typeof productsTable.$inferSelect, categoryName: string) 
     p.finalUnitPrice != null
       ? Number(p.finalUnitPrice)
       : Number(addUnitPrices(p.providerUnitPrice ?? p.basePriceUsd ?? 0, p.storeProfitPerUnit ?? p.priceUsd ?? 0));
+  const minQty = p.minQuantity ?? (p.minQty != null ? Number(p.minQty) : 1);
+  const safeMinQty = Number.isFinite(Number(minQty)) && Number(minQty) > 0 ? Number(minQty) : 1;
 
   return {
     id: String(p.id),
@@ -26,10 +28,11 @@ function productRow(p: typeof productsTable.$inferSelect, categoryName: string) 
     categoryName,
     image: p.image,
     priceUsd: finalPriceUsd,
+    minTotalUsd: Number((finalPriceUsd * safeMinQty).toFixed(8)),
     priceSyp: Number(p.priceSyp),
     productType: p.productType as "amount" | "package",
     available: p.available,
-    minQty: p.minQuantity ?? (p.minQty != null ? Number(p.minQty) : undefined),
+    minQty: safeMinQty,
     maxQty: p.maxQuantity ?? (p.maxQty != null ? Number(p.maxQty) : undefined),
     description: p.description ?? undefined,
     featured: p.featured,

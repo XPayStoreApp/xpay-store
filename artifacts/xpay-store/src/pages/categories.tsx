@@ -14,6 +14,7 @@ type ProductItem = {
   categoryName: string;
   image: string;
   priceUsd: number;
+  minTotalUsd?: number;
   minQty?: number;
 };
 
@@ -23,6 +24,9 @@ function getDefaultQuantity(product: ProductItem) {
 }
 
 function formatTotalUsdPrice(product: ProductItem) {
+  const apiTotal = Number(product.minTotalUsd);
+  if (Number.isFinite(apiTotal) && apiTotal >= 0) return `$${apiTotal.toFixed(5)}`;
+
   const unitPrice = Number(product.priceUsd || 0);
   const total = unitPrice * getDefaultQuantity(product);
   if (!Number.isFinite(total)) return "$0.00000";
