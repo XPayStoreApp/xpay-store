@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { post } from "../lib/api";
 import {
@@ -6,7 +6,7 @@ import {
   CreditCard, Image as ImageIcon, Megaphone, Share2, Server, Ticket,
   Crown, KeyRound, MessageSquare, Code2, Bell, ShieldCheck, Activity,
   Settings as SettingsIcon, Palette, BarChart3, Database, User as UserIcon,
-  Lock, Globe, Languages as LangIcon, PowerOff, LogOut, Menu, X,
+  Lock, Globe, Languages as LangIcon, PowerOff, LogOut, Menu, X, Moon, Sun,
 } from "lucide-react";
 
 const NAV: { to: string; label: string; icon: any; group: string }[] = [
@@ -57,7 +57,13 @@ export default function Layout({
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("xpay-admin-theme") === "dark");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("admin-dark", darkMode);
+    localStorage.setItem("xpay-admin-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   const handleLogout = async () => {
     try {
@@ -125,6 +131,14 @@ export default function Layout({
           </button>
           <div className="hidden lg:block text-sm text-slate-500">مرحبًا بك في لوحة إدارة XPayStore</div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setDarkMode((value) => !value)}
+              className="text-slate-500 hover:text-brand-600 p-2 rounded-lg hover:bg-slate-100"
+              title={darkMode ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الداكن"}
+              type="button"
+            >
+              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <div className="text-sm text-left hidden sm:block">
               <div className="font-semibold text-slate-900">{me?.fullName || me?.username}</div>
               <div className="text-xs text-slate-500">{me?.role}</div>

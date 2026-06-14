@@ -59,3 +59,92 @@ textarea:focus {
   border-color: #0052cc;
   box-shadow: 0 0 0 3px rgba(0, 82, 204, 0.15);
 }
+
+/* Admin panel dark mode. Scoped to xpay-admin only via html.admin-dark. */
+html.admin-dark body {
+  background: #08111f;
+  color: #e5edf8;
+}
+
+html.admin-dark .bg-slate-100,
+html.admin-dark .bg-slate-50 {
+  background-color: #0b1628 !important;
+}
+
+html.admin-dark .bg-white {
+  background-color: #101d31 !important;
+}
+
+html.admin-dark .bg-card,
+html.admin-dark .bg-slate-200 {
+  background-color: #14233a !important;
+}
+
+html.admin-dark .text-slate-900,
+html.admin-dark .text-slate-800,
+html.admin-dark .text-slate-700,
+html.admin-dark .text-slate-600 {
+  color: #e5edf8 !important;
+}
+
+html.admin-dark .text-slate-500,
+html.admin-dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+html.admin-dark .border-slate-200,
+html.admin-dark .border-slate-100,
+html.admin-dark .border-slate-300 {
+  border-color: #26364f !important;
+}
+
+html.admin-dark input,
+html.admin-dark select,
+html.admin-dark textarea {
+  background-color: #0b1628 !important;
+  color: #e5edf8 !important;
+  border-color: #2a3b57 !important;
+}
+
+html.admin-dark input::placeholder,
+html.admin-dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.admin-dark table thead,
+html.admin-dark .bg-slate-100 table thead,
+html.admin-dark .bg-slate-50 table thead {
+  background-color: #14233a !important;
+}
+
+html.admin-dark tr:hover,
+html.admin-dark .hover\:bg-slate-50:hover,
+html.admin-dark .hover\:bg-slate-100:hover {
+  background-color: #182945 !important;
+}
+
+html.admin-dark .shadow-sm,
+html.admin-dark .shadow-xl,
+html.admin-dark .shadow-lg {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35) !important;
+}
+
+html.admin-dark .bg-rose-50 {
+  background-color: rgba(127, 29, 29, 0.28) !important;
+}
+
+html.admin-dark .bg-emerald-50 {
+  background-color: rgba(6, 78, 59, 0.35) !important;
+}
+
+html.admin-dark .bg-brand-600 {
+  background-color: #2563eb !important;
+}
+
+html.admin-dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+html.admin-dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
