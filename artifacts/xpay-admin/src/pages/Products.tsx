@@ -169,6 +169,12 @@ export default function Products() {
 
     payload.storeProfitPerUnit = (finalUnit - providerUnit).toFixed(8);
     payload.priceUsd = payload.storeProfitPerUnit;
+    if (!["fixed", "range", "list"].includes(String(payload.quantityType || ""))) {
+      payload.quantityType = "fixed";
+    }
+    if (payload.minQuantity == null || payload.minQuantity === "") {
+      payload.minQuantity = 1;
+    }
 
     const min = asNumber(payload.minQuantity ?? payload.minQty ?? 1);
     const max = payload.maxQuantity ?? payload.maxQty;

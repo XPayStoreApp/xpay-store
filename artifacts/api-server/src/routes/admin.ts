@@ -707,6 +707,12 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
     if ("maxQty" in normalized) normalizeNumberField(normalized, "maxQty", { nullable: true });
     if ("minQuantity" in normalized) normalizeNumberField(normalized, "minQuantity", { nullable: true });
     if ("maxQuantity" in normalized) normalizeNumberField(normalized, "maxQuantity", { nullable: true });
+    if (isBlank(normalized.quantityType) || !["fixed", "range", "list"].includes(String(normalized.quantityType))) {
+      normalized.quantityType = "fixed";
+    }
+    if (isBlank(normalized.quantityValues)) {
+      normalized.quantityValues = null;
+    }
     if ("providerId" in normalized) normalizeNumberField(normalized, "providerId", { nullable: true });
     if ("providerProductId" in normalized) {
       normalizeNumberField(normalized, "providerProductId", { nullable: true });
