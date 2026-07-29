@@ -18,6 +18,13 @@ type CategoryItem = {
   productCount: number;
 };
 
+function withImageVersion(url: string, version: string): string {
+  const cleanUrl = String(url || "").trim();
+  if (!cleanUrl || cleanUrl.startsWith("data:") || cleanUrl.startsWith("blob:")) return cleanUrl;
+  const separator = cleanUrl.includes("?") ? "&" : "?";
+  return `${cleanUrl}${separator}v=${encodeURIComponent(version)}`;
+}
+
 function getBrandedCategoryImage(categoryName: string, fallback?: string | null): string {
   const customImage = String(fallback || "").trim();
   if (customImage) return customImage;
@@ -76,7 +83,7 @@ export default function Home() {
   const [emblaRef] = useEmblaCarousel({ loop: true, direction: "rtl" }, [Autoplay({ delay: 3000 })]);
   const localTelegramUser = readLocalTelegramUser();
   const isInsideTelegram = Boolean((globalThis as any)?.Telegram?.WebApp);
-  const visibleCategories = (fallbackCategories && fallbackCategories.length > 0 ? fallbackCategories : categories) || [];
+  const visibleCategories = fallbackCategories || categories || [];
   const effectiveTelegramId = profile?.telegramId || localTelegramUser?.telegramId || "";
   const displayName =
     (profile?.telegramId ? profile.username : "") ||
@@ -226,7 +233,7 @@ export default function Home() {
                   >
                     <div className="w-full aspect-square rounded-2xl bg-card border border-white/5 overflow-hidden relative shadow-lg group-hover:border-primary/30 transition-colors">
                       <img
-                        src={getBrandedCategoryImage(cat.name, cat.image)}
+                        src={withImageVersion(getBrandedCategoryImage(cat.name, cat.image), `${cat.id}-${cat.image || ""}`)}
                         alt={cat.name}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />

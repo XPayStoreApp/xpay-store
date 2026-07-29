@@ -41,6 +41,9 @@ function productRow(p: typeof productsTable.$inferSelect, categoryName: string) 
 
 router.get("/categories", async (_req, res) => {
   try {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     const cats = await db.select().from(categoriesTable).orderBy(asc(categoriesTable.order));
     const counts = await db
       .select({ cid: productsTable.categoryId, c: sql<number>`count(*)::int` })
