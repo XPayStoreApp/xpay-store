@@ -407,6 +407,28 @@ function FieldInput({
       />
     );
   }
+  if (field.type === "image") {
+    const imageUrl = String(value || "").trim();
+
+    return (
+      <div className="space-y-2">
+        <input
+          type="text"
+          className={cls}
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.placeholder || "https://example.com/image.png"}
+          required={field.required}
+          readOnly={field.readOnly}
+        />
+        {imageUrl && (
+          <div className="w-24 h-24 rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+            <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <input
       type="text"

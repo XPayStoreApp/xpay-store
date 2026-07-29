@@ -19,6 +19,9 @@ type CategoryItem = {
 };
 
 function getBrandedCategoryImage(categoryName: string, fallback?: string | null): string {
+  const customImage = String(fallback || "").trim();
+  if (customImage) return customImage;
+
   const name = String(categoryName || "").trim().toLowerCase();
 
   if (name.includes("تطبيق") || name.includes("app")) return "/xpay-cat-apps.svg";
@@ -29,7 +32,7 @@ function getBrandedCategoryImage(categoryName: string, fallback?: string | null)
   if (name.includes("رقم") || name.includes("number")) return "/xpay-cat-numbers.svg";
   if (name.includes("بطاق") || name.includes("card")) return "/xpay-cat-cards.svg";
 
-  return fallback || "/xpay-cat-apps.svg";
+  return "/xpay-cat-apps.svg";
 }
 
 function readLocalTelegramUser() {
