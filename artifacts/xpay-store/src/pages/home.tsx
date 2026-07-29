@@ -13,6 +13,7 @@ type CategoryItem = {
   id: string;
   name: string;
   image: string;
+  imageVersion?: string;
   order: number;
   active: boolean;
   productCount: number;
@@ -83,7 +84,15 @@ export default function Home() {
   const [emblaRef] = useEmblaCarousel({ loop: true, direction: "rtl" }, [Autoplay({ delay: 3000 })]);
   const localTelegramUser = readLocalTelegramUser();
   const isInsideTelegram = Boolean((globalThis as any)?.Telegram?.WebApp);
-  const visibleCategories = fallbackCategories || categories || [];
+  const visibleCategories: CategoryItem[] = (fallbackCategories || categories || []).map((cat: any) => ({
+    id: String(cat.id),
+    name: String(cat.name || ""),
+    image: String(cat.image || ""),
+    imageVersion: cat.imageVersion ? String(cat.imageVersion) : undefined,
+    order: Number(cat.order || 0),
+    active: Boolean(cat.active),
+    productCount: Number(cat.productCount || 0),
+  }));
   const effectiveTelegramId = profile?.telegramId || localTelegramUser?.telegramId || "";
   const displayName =
     (profile?.telegramId ? profile.username : "") ||
@@ -233,7 +242,10 @@ export default function Home() {
                   >
                     <div className="w-full aspect-square rounded-2xl bg-card border border-white/5 overflow-hidden relative shadow-lg group-hover:border-primary/30 transition-colors">
                       <img
-                        src={withImageVersion(getBrandedCategoryImage(cat.name, cat.image), `${cat.id}-${cat.image || ""}`)}
+                        src={withImageVersion(
+                          getBrandedCategoryImage(cat.name, cat.image),
+                          cat.imageVersion || `${cat.id}-${cat.image || ""}`,
+                        )}
                         alt={cat.name}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />

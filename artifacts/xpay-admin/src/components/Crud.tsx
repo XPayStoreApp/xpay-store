@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { get, post, put, del } from "../lib/api";
+import { get, post, patch, del } from "../lib/api";
 import { Plus, Edit2, Trash2, X, Save } from "lucide-react";
 
 export type FieldType = "text" | "number" | "textarea" | "boolean" | "select" | "image";
@@ -55,7 +55,7 @@ export default function Crud({ resource, title, fields, rowExtras, beforeSubmit,
   const handleSave = async (data: any) => {
     const payload = beforeSubmit ? beforeSubmit(data) : data;
     if (editing?.id) {
-      await put(`/${resource}/${editing.id}`, payload);
+      await patch(`/${resource}/${editing.id}`, payload);
     } else {
       await post(`/${resource}`, payload);
     }

@@ -33,6 +33,7 @@ export const ListCategoriesResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
   image: zod.string(),
+  imageVersion: zod.string().optional(),
   order: zod.number(),
   active: zod.boolean(),
   productCount: zod.number(),

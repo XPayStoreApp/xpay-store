@@ -10,6 +10,7 @@ export interface Category {
   id: string;
   name: string;
   image: string;
+  imageVersion?: string;
   order: number;
   active: boolean;
   productCount: number;

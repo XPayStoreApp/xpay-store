@@ -677,6 +677,19 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
   if (!data || typeof data !== "object") return data;
   const normalized: Record<string, any> = { ...data };
 
+  if (path === "categories") {
+    if ("name" in normalized && typeof normalized.name === "string") {
+      normalized.name = normalized.name.trim();
+    }
+    if ("image" in normalized && typeof normalized.image === "string") {
+      normalized.image = normalized.image.trim();
+    }
+    if (isBlank(normalized.name)) throw new ValidationError("category name is required");
+    if (isBlank(normalized.image)) throw new ValidationError("category image is required");
+    if ("order" in normalized) normalizeNumberField(normalized, "order", { required: true });
+    if ("active" in normalized) normalized.active = !!normalized.active;
+  }
+
   if (path === "products") {
     if ("name" in normalized && typeof normalized.name === "string") {
       normalized.name = normalized.name.trim();

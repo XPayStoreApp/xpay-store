@@ -55,6 +55,7 @@ router.get("/categories", async (_req, res) => {
         id: String(c.id),
         name: c.name,
         image: c.image,
+        imageVersion: `${c.id}:${c.image}`,
         order: c.order,
         active: c.active,
         productCount: map.get(c.id) ?? 0,
