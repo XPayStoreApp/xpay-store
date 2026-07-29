@@ -87,7 +87,7 @@ export default function Providers() {
     // 3. إذا لم نجد، استخرج من الصف DOM
     if (pid === undefined || pid === null || isNaN(Number(pid))) {
       const target = event.currentTarget as HTMLElement;
-      const row = target.closest('tr') as HTMLElement | null;
+      const row = target.closest('tr') as HTMLTableRowElement | null;
       if (row) {
         const firstCell = row.cells[0]?.textContent?.trim();
         console.log("🔎 Extracted from first cell:", firstCell);

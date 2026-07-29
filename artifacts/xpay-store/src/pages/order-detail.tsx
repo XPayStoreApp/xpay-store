@@ -3,8 +3,18 @@ import { useRoute, Link } from "wouter";
 import { ChevronRight, Package, Clock, CheckCircle2, XCircle, HeadphonesIcon, Copy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { format } from "date-fns";
 import { toast } from "sonner";
+
+const formatDateTime = (value: string | Date) =>
+  new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date(value)).replace(",", "");
 
 export default function OrderDetail() {
   const [, params] = useRoute("/orders/:id");
@@ -122,7 +132,7 @@ export default function OrderDetail() {
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">تاريخ الطلب</span>
               <span className="text-sm font-medium text-foreground" dir="ltr">
-                {format(new Date(order.createdAt), "yyyy-MM-dd HH:mm:ss")}
+                {formatDateTime(order.createdAt)}
               </span>
             </div>
 

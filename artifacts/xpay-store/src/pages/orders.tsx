@@ -4,8 +4,15 @@ import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+
+const formatShortDateTime = (value: string | Date) =>
+  new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
 
 export default function Orders() {
   const [filter, setFilter] = useState<"all" | "wait" | "accept" | "reject">("all");
@@ -135,7 +142,7 @@ export default function Orders() {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-mono">#{order.orderNumber}</span>
                       <span>•</span>
-                      <span>{format(new Date(order.createdAt), "MMM d, HH:mm")}</span>
+                      <span>{formatShortDateTime(order.createdAt)}</span>
                     </div>
                     <StatusBadge status={order.status} />
                   </div>

@@ -2,8 +2,16 @@ import { useGetDepositsSummary, useListMyDeposits, getGetDepositsSummaryQueryKey
 import { Search, Receipt, Clock, CheckCircle2, XCircle, ArrowDownToLine } from "lucide-react";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
+
+const formatDateTime = (value: string | Date) =>
+  new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value)).replace(",", "");
 
 export default function DepositsList() {
   const [filter, setFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
@@ -110,7 +118,7 @@ export default function DepositsList() {
                 </div>
                 
                 <div className="text-[10px] text-muted-foreground">
-                  {format(new Date(deposit.createdAt), "yyyy-MM-dd HH:mm")}
+                  {formatDateTime(deposit.createdAt)}
                 </div>
               </div>
             </div>
