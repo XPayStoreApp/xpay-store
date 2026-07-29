@@ -5,6 +5,7 @@ import {
   adminsTable,
   usersTable,
   categoriesTable,
+  productGroupsTable,
   productsTable,
   productChangesLogTable,
   ordersTable,
@@ -600,6 +601,13 @@ function makeCrud<T extends { id: any }>(
         await db.delete(autoCodesTable).where(eq(autoCodesTable.productId, id));
       }
 
+      if (path === "product-groups") {
+        await db
+          .update(productsTable)
+          .set({ groupId: null })
+          .where(eq(productsTable.groupId, id));
+      }
+
       await db.delete(table).where(eq(table.id, id));
       await logActivity(
         { id: req.session.adminId, name: req.session.adminUsername },
@@ -677,15 +685,16 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
   if (!data || typeof data !== "object") return data;
   const normalized: Record<string, any> = { ...data };
 
-  if (path === "categories") {
+  if (path === "categories" || path === "product-groups") {
     if ("name" in normalized && typeof normalized.name === "string") {
       normalized.name = normalized.name.trim();
     }
     if ("image" in normalized && typeof normalized.image === "string") {
       normalized.image = normalized.image.trim();
     }
-    if (isBlank(normalized.name)) throw new ValidationError("category name is required");
-    if (isBlank(normalized.image)) throw new ValidationError("category image is required");
+    if (isBlank(normalized.name)) throw new ValidationError(`${path} name is required`);
+    if (isBlank(normalized.image)) throw new ValidationError(`${path} image is required`);
+    if ("categoryId" in normalized) normalizeNumberField(normalized, "categoryId", { required: path === "product-groups" });
     if ("order" in normalized) normalizeNumberField(normalized, "order", { required: true });
     if ("active" in normalized) normalized.active = !!normalized.active;
   }
@@ -727,6 +736,7 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
       normalized.quantityValues = null;
     }
     if ("providerId" in normalized) normalizeNumberField(normalized, "providerId", { nullable: true });
+    if ("groupId" in normalized) normalizeNumberField(normalized, "groupId", { nullable: true });
     if ("providerProductId" in normalized) {
       normalizeNumberField(normalized, "providerProductId", { nullable: true });
     }
@@ -859,9 +869,15 @@ makeCrud("categories", categoriesTable, {
   allowedFields: ["name", "image", "order", "active"],
 });
 
+makeCrud("product-groups", productGroupsTable, {
+  orderBy: productGroupsTable.order,
+  allowedFields: ["categoryId", "name", "image", "order", "active"],
+});
+
 makeCrud("products", productsTable, {
   allowedFields: [
     "categoryId",
+    "groupId",
     "name",
     "image",
     "priceUsd",
@@ -1428,11 +1444,12 @@ router.patch("/admin/deposits/:id/status", requireAdmin, async (req, res) => {
 // ========== GENERIC PUT FOR ALL CRUDS (ALIAS OF PATCH) ==========
 const PUT_RESOURCES: Array<{ path: string; table: any; allowed: string[] }> = [
   { path: "categories", table: categoriesTable, allowed: ["name", "image", "order", "active"] },
+  { path: "product-groups", table: productGroupsTable, allowed: ["categoryId", "name", "image", "order", "active"] },
   {
     path: "products",
     table: productsTable,
     allowed: [
-      "categoryId", "name", "image", "priceUsd", "priceSyp", "basePriceUsd",
+      "categoryId", "groupId", "name", "image", "priceUsd", "priceSyp", "basePriceUsd",
       "providerUnitPrice", "storeProfitPerUnit", "finalUnitPrice",
       "productType", "available", "minQty", "maxQty", "minQuantity", "maxQuantity",
       "quantityType", "quantityValues", "description", "featured",
@@ -1520,6 +1537,7 @@ router.post("/admin/bulk-delete", requireAdmin, async (req, res) => {
   // جدول حسب المورد
   const tableMap: Record<string, any> = {
     categories: categoriesTable,
+    "product-groups": productGroupsTable,
     products: productsTable,
     providers: providersTable,
     coupons: couponsTable,
@@ -1545,6 +1563,13 @@ router.post("/admin/bulk-delete", requireAdmin, async (req, res) => {
     if (resource === "categories") {
       for (const id of ids) {
         await db.execute(sql`DELETE FROM products WHERE category_id = ${id}`);
+      }
+    } else if (resource === "product-groups") {
+      for (const id of ids) {
+        await db
+          .update(productsTable)
+          .set({ groupId: null })
+          .where(eq(productsTable.groupId, id));
       }
     } else if (resource === "providers") {
       for (const id of ids) {

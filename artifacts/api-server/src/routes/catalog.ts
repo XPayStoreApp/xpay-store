@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, categoriesTable, productsTable, newsTable, bannersTable } from "@workspace/db";
+import { db, categoriesTable, productGroupsTable, productsTable, newsTable, bannersTable } from "@workspace/db";
 import { and, asc, eq, ilike, sql } from "drizzle-orm";
 import {
   ListCategoriesResponse,
@@ -20,11 +20,18 @@ function productRow(p: typeof productsTable.$inferSelect, categoryName: string) 
       : Number(addUnitPrices(p.providerUnitPrice ?? p.basePriceUsd ?? 0, p.storeProfitPerUnit ?? p.priceUsd ?? 0));
   const minQty = p.minQuantity ?? (p.minQty != null ? Number(p.minQty) : 1);
   const safeMinQty = Number.isFinite(Number(minQty)) && Number(minQty) > 0 ? Number(minQty) : 1;
+  const quantityValues = Array.isArray(p.quantityValues)
+    ? p.quantityValues
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+        .sort((a, b) => a - b)
+    : undefined;
 
   return {
     id: String(p.id),
     name: p.name,
     categoryId: String(p.categoryId),
+    groupId: p.groupId != null ? String(p.groupId) : undefined,
     categoryName,
     image: p.image,
     priceUsd: finalPriceUsd,
@@ -34,6 +41,8 @@ function productRow(p: typeof productsTable.$inferSelect, categoryName: string) 
     available: p.available,
     minQty: safeMinQty,
     maxQty: p.maxQuantity ?? (p.maxQty != null ? Number(p.maxQty) : undefined),
+    quantityType: p.quantityType,
+    quantityValues,
     description: p.description ?? undefined,
     featured: p.featured,
   };
@@ -70,9 +79,14 @@ router.get("/categories", async (_req, res) => {
 
 router.get("/products", async (req, res) => {
   try {
-    const { categoryId, q } = req.query as { categoryId?: string; q?: string };
+    const { categoryId, groupId, q } = req.query as { categoryId?: string; groupId?: string; q?: string };
     const conds = [];
     if (categoryId) conds.push(eq(productsTable.categoryId, Number(categoryId)));
+    if (groupId) {
+      conds.push(eq(productsTable.groupId, Number(groupId)));
+    } else if (categoryId) {
+      conds.push(sql`${productsTable.groupId} IS NULL`);
+    }
     if (q) conds.push(ilike(productsTable.name, `%${q}%`));
     const rows = await db
       .select({
@@ -85,6 +99,41 @@ router.get("/products", async (req, res) => {
     res.json(ListProductsResponse.parse(rows.map((r) => productRow(r.p, r.cname))));
   } catch (error) {
     console.error("🔥 FULL ERROR in /products:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+router.get("/product-groups", async (req, res) => {
+  try {
+    const { categoryId } = req.query as { categoryId?: string };
+    const conds = [eq(productGroupsTable.active, true)];
+    if (categoryId) conds.push(eq(productGroupsTable.categoryId, Number(categoryId)));
+
+    const rows = await db
+      .select({
+        g: productGroupsTable,
+        productCount: sql<number>`count(${productsTable.id})::int`,
+      })
+      .from(productGroupsTable)
+      .leftJoin(productsTable, eq(productsTable.groupId, productGroupsTable.id))
+      .where(and(...conds))
+      .groupBy(productGroupsTable.id)
+      .orderBy(asc(productGroupsTable.order), asc(productGroupsTable.id));
+
+    res.json(
+      rows.map((r) => ({
+        id: String(r.g.id),
+        categoryId: String(r.g.categoryId),
+        name: r.g.name,
+        image: r.g.image,
+        imageVersion: `${r.g.id}:${r.g.image}`,
+        order: r.g.order,
+        active: r.g.active,
+        productCount: Number(r.productCount || 0),
+      })),
+    );
+  } catch (error) {
+    console.error("🔥 FULL ERROR in /product-groups:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });

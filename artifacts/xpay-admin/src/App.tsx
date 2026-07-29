@@ -8,6 +8,7 @@ import Orders from "./pages/Orders";
 import Deposits from "./pages/Deposits";
 import Users from "./pages/Users";
 import Categories from "./pages/Categories";
+import ProductGroups from "./pages/ProductGroups";
 import Products from "./pages/Products";
 import PaymentMethods from "./pages/PaymentMethods";
 import Banners from "./pages/Banners";
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="/deposits" element={<Deposits />} />
         <Route path="/users" element={<Users />} />
         <Route path="/categories" element={<Categories />} />
+        <Route path="/product-groups" element={<ProductGroups />} />
         <Route path="/products" element={<Products />} />
         <Route path="/payment-methods" element={<PaymentMethods />} />
         <Route path="/banners" element={<Banners />} />

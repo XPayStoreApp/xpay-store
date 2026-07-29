@@ -93,19 +93,27 @@ function PreviewTotals({ row }: { row: any }) {
 
 export default function Products() {
   const [categories, setCategories] = useState<{ value: string; label: string }[]>([]);
+  const [groups, setGroups] = useState<{ value: string; label: string }[]>([]);
   const [providers, setProviders] = useState<{ value: string; label: string }[]>([]);
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchRefs = async () => {
       try {
-        const [cats, provs] = await Promise.all([get<any[]>("/categories"), get<any[]>("/providers")]);
+        const [cats, groupRows, provs] = await Promise.all([
+          get<any[]>("/categories"),
+          get<any[]>("/product-groups"),
+          get<any[]>("/providers"),
+        ]);
 
         if (Array.isArray(cats)) {
           setCategories(cats.map((c: any) => ({ value: String(c.id), label: `${c.id} - ${c.name}` })));
         }
         if (Array.isArray(provs)) {
           setProviders(provs.map((p: any) => ({ value: String(p.id), label: `${p.id} - ${p.name}` })));
+        }
+        if (Array.isArray(groupRows)) {
+          setGroups(groupRows.map((g: any) => ({ value: String(g.id), label: `${g.id} - ${g.name}` })));
         }
       } catch (err) {
         console.error("Error fetching product references:", err);
@@ -121,6 +129,10 @@ export default function Products() {
   const providerOptions = useMemo(
     () => (providers.length > 0 ? providers : [{ value: "", label: "لا يوجد مزودون" }]),
     [providers],
+  );
+  const groupOptions = useMemo(
+    () => [{ value: "", label: "بدون مجموعة" }, ...groups],
+    [groups],
   );
 
   const verifyProviderProduct = async (row: any) => {
@@ -152,6 +164,7 @@ export default function Products() {
     payload.basePriceUsd = cleanDecimal(payload.basePriceUsd);
     payload.providerUnitPrice = cleanDecimal(payload.providerUnitPrice ?? payload.basePriceUsd);
     payload.finalUnitPrice = cleanDecimal(payload.finalUnitPrice);
+    if (payload.groupId === "") payload.groupId = null;
 
     if (!preciseDecimalPattern.test(payload.finalUnitPrice)) {
       throw new Error("سعر البيع النهائي لكل وحدة يجب أن يكون رقما موجبا ويدعم حتى 12 رقما بعد الفاصلة.");
@@ -211,6 +224,14 @@ export default function Products() {
           type: "select",
           required: false,
           options: categoryOptions,
+        },
+        {
+          name: "groupId",
+          label: "مجموعة داخل القسم",
+          type: "select",
+          required: false,
+          options: groupOptions,
+          helperText: "اختياري. عند اختيار مجموعة سيظهر المنتج داخلها بدلاً من ظهوره مباشرة في القسم.",
         },
         { name: "name", label: "اسم المنتج", type: "text", required: true },
         { name: "image", label: "رابط الصورة", type: "text", required: true },

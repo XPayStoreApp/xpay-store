@@ -52,10 +52,18 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (!product) return;
-    const min = Number(product.minQty || 1);
+    const officialValues = Array.isArray((product as any).quantityValues)
+      ? (product as any).quantityValues
+          .map((value: unknown) => Number(value))
+          .filter((value: number) => Number.isInteger(value) && value > 0)
+          .sort((a: number, b: number) => a - b)
+      : [];
+    const min = (product as any).quantityType === "list" && officialValues.length
+      ? officialValues[0]
+      : Number(product.minQty || 1);
     setQuantity(min);
     setQuantityInput(String(min));
-  }, [product?.id, product?.minQty]);
+  }, [product?.id, product?.minQty, (product as any)?.quantityType]);
 
   if (isLoading) {
     return (
@@ -75,6 +83,15 @@ export default function ProductDetail() {
   }
 
   const minQty = product.minQty || 1;
+  const officialQuantityValues = Array.isArray((product as any).quantityValues)
+    ? (product as any).quantityValues
+        .map((value: unknown) => Number(value))
+        .filter((value: number) => Number.isInteger(value) && value > 0)
+        .sort((a: number, b: number) => a - b)
+    : [];
+  const quantityType = (product as any).quantityType;
+  const usesOfficialQuantityList = quantityType === "list" && officialQuantityValues.length > 0;
+  const usesFixedQuantity = quantityType === "fixed";
   const purchaseMode = detectPurchaseMode(product.categoryName, product.productType);
   const totalUsd = product.priceUsd * quantity;
 
@@ -94,7 +111,15 @@ export default function ProductDetail() {
       return minQty;
     }
 
-    const nextQuantity = Math.max(minQty, Math.floor(parsed));
+    const requestedQuantity = Math.max(minQty, Math.floor(parsed));
+    let nextQuantity = requestedQuantity;
+    if (usesFixedQuantity) {
+      nextQuantity = minQty;
+    } else if (usesOfficialQuantityList) {
+      nextQuantity = officialQuantityValues.includes(requestedQuantity)
+        ? requestedQuantity
+        : officialQuantityValues[0] || minQty;
+    }
     setQuantity(nextQuantity);
     setQuantityInput(String(nextQuantity));
     return nextQuantity;
@@ -177,17 +202,44 @@ export default function ProductDetail() {
               <span className="text-xs text-muted-foreground">(الحد الأدنى: {minQty.toLocaleString()})</span>
             </div>
 
-            <div className="bg-background border border-white/5 p-2 rounded-2xl">
-              <Input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={quantityInput}
-                onChange={(e) => handleQtyInputChange(e.target.value)}
-                onBlur={() => commitQuantityInput()}
-                className="w-full h-10 text-center font-bold text-lg bg-transparent border-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
+            {usesFixedQuantity ? (
+              <div className="rounded-2xl border border-primary/50 bg-primary/10 px-4 py-4 text-center">
+                <div className="text-xs text-muted-foreground mb-1">كمية رسمية ثابتة من المزود</div>
+                <div className="text-xl font-black text-primary">{minQty.toLocaleString()}</div>
+              </div>
+            ) : usesOfficialQuantityList ? (
+              <div className="grid grid-cols-2 gap-2">
+                {officialQuantityValues.map((value: number) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      setQuantity(value);
+                      setQuantityInput(String(value));
+                    }}
+                    className={`rounded-2xl border px-3 py-3 text-sm font-black transition ${
+                      quantity === value
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-white/10 bg-background text-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    {value.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-background border border-white/5 p-2 rounded-2xl">
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={quantityInput}
+                  onChange={(e) => handleQtyInputChange(e.target.value)}
+                  onBlur={() => commitQuantityInput()}
+                  className="w-full h-10 text-center font-bold text-lg bg-transparent border-0 focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+            )}
           </div>
 
           {(purchaseMode === "apps" || purchaseMode === "games") && (

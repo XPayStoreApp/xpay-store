@@ -49,6 +49,7 @@ export interface Product {
   id: string;
   name: string;
   categoryId: string;
+  groupId?: string;
   categoryName: string;
   image: string;
   priceUsd: number;
@@ -203,6 +204,7 @@ export interface DepositsSummary {
 
 export type ListProductsParams = {
   categoryId?: string;
+  groupId?: string;
   q?: string;
 };
 

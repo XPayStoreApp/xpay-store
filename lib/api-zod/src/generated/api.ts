@@ -45,6 +45,7 @@ export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem);
  */
 export const ListProductsQueryParams = zod.object({
   categoryId: zod.coerce.string().optional(),
+  groupId: zod.coerce.string().optional(),
   q: zod.coerce.string().optional(),
 });
 
@@ -52,6 +53,7 @@ export const ListProductsResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
   categoryId: zod.string(),
+  groupId: zod.string().optional(),
   categoryName: zod.string(),
   image: zod.string(),
   priceUsd: zod.number(),
@@ -73,6 +75,7 @@ export const ListFeaturedProductsResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
   categoryId: zod.string(),
+  groupId: zod.string().optional(),
   categoryName: zod.string(),
   image: zod.string(),
   priceUsd: zod.number(),
@@ -97,6 +100,7 @@ export const GetProductResponse = zod.object({
   id: zod.string(),
   name: zod.string(),
   categoryId: zod.string(),
+  groupId: zod.string().optional(),
   categoryName: zod.string(),
   image: zod.string(),
   priceUsd: zod.number(),

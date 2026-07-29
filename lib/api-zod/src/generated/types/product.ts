@@ -11,6 +11,7 @@ export interface Product {
   id: string;
   name: string;
   categoryId: string;
+  groupId?: string;
   categoryName: string;
   image: string;
   priceUsd: number;
@@ -20,6 +21,8 @@ export interface Product {
   available: boolean;
   minQty?: number;
   maxQty?: number;
+  quantityType?: "fixed" | "range" | "list";
+  quantityValues?: number[];
   description?: string;
   featured: boolean;
 }

@@ -18,6 +18,21 @@ type ProductItem = {
   minQty?: number;
 };
 
+type ProductGroupItem = {
+  id: string;
+  categoryId: string;
+  name: string;
+  image: string;
+  imageVersion?: string;
+  productCount: number;
+};
+
+function withImageVersion(url: string, version: string) {
+  const cleanUrl = String(url || "").trim();
+  if (!cleanUrl || cleanUrl.startsWith("data:") || cleanUrl.startsWith("blob:")) return cleanUrl;
+  return `${cleanUrl}${cleanUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
+}
+
 function getDefaultQuantity(product: ProductItem) {
   const minQty = Number(product.minQty || 1);
   return Number.isFinite(minQty) && minQty > 0 ? minQty : 1;
@@ -38,6 +53,7 @@ export default function Categories() {
   const categoryId = params?.id;
   const [search, setSearch] = useState("");
   const [fallbackProducts, setFallbackProducts] = useState<ProductItem[] | null>(null);
+  const [groups, setGroups] = useState<ProductGroupItem[]>([]);
 
   const { data: products, isLoading } = useListProducts(
     { categoryId, q: search || undefined },
@@ -50,12 +66,18 @@ export default function Categories() {
     let cancelled = false;
     const query = search.trim();
     const path = `/products?categoryId=${encodeURIComponent(categoryId)}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
-    getPublicJson<ProductItem[]>(path)
-      .then((rows) => {
-        if (!cancelled) setFallbackProducts(rows);
+    Promise.all([
+      getPublicJson<ProductItem[]>(path),
+      getPublicJson<ProductGroupItem[]>(`/product-groups?categoryId=${encodeURIComponent(categoryId)}`),
+    ])
+      .then(([rows, groupRows]) => {
+        if (!cancelled) {
+          setFallbackProducts(rows);
+          setGroups(query ? [] : groupRows);
+        }
       })
       .catch((error) => {
-        console.error("Fallback products load failed:", error);
+        console.error("Category content load failed:", error);
       });
 
     return () => {
@@ -90,6 +112,45 @@ export default function Categories() {
       </div>
 
       <div className="flex-1 p-4">
+        {!search && groups.length > 0 && (
+          <div className="mb-6">
+            <div className="mb-3 text-sm font-bold text-foreground">الخيارات المتاحة</div>
+            <div className="grid grid-cols-4 gap-3.5">
+              {groups.map((group, i) => (
+                <Link key={group.id} href={`/groups/${group.id}`}>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.04 }}
+                    className="h-full min-h-[126px] bg-card/90 border border-white/5 rounded-2xl overflow-hidden cursor-pointer group shadow-lg hover:border-primary/30 transition-all flex flex-col"
+                  >
+                    <div className="aspect-[4/3] relative overflow-hidden bg-muted/30 shrink-0">
+                      {group.image ? (
+                        <img
+                          src={withImageVersion(group.image, group.imageVersion || `${group.id}-${group.image}`)}
+                          alt={group.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full xpay-brand-card flex items-center justify-center">
+                          <PackageOpen className="w-8 h-8 text-primary/40" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+                    </div>
+                    <div className="min-h-[58px] p-2.5 flex flex-col items-center justify-center gap-1">
+                      <h3 className="text-[11px] sm:text-xs font-bold text-foreground line-clamp-2 leading-snug text-center break-words group-hover:text-primary transition-colors">
+                        {group.name}
+                      </h3>
+                      <span className="text-[10px] font-bold text-muted-foreground">{group.productCount} منتج</span>
+                    </div>
+                  </motion.div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         {isLoading && visibleProducts.length === 0 ? (
           <div className="grid grid-cols-4 gap-3.5">
             {Array.from({ length: 8 }).map((_, i) => (

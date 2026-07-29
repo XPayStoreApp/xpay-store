@@ -36,9 +36,19 @@ export const categoriesTable = pgTable("categories", {
   active: boolean("active").notNull().default(true),
 });
 
+export const productGroupsTable = pgTable("product_groups", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id").notNull().references(() => categoriesTable.id),
+  name: text("name").notNull(),
+  image: text("image").notNull(),
+  order: integer("order").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+});
+
 export const productsTable = pgTable("products", {
   id: serial("id").primaryKey(),
   categoryId: integer("category_id").notNull().references(() => categoriesTable.id),
+  groupId: integer("group_id").references(() => productGroupsTable.id),
   name: text("name").notNull(),
   image: text("image").notNull(),
   priceUsd: numeric("price_usd", { precision: 24, scale: 12 }).notNull(),
