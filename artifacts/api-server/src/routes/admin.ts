@@ -1447,13 +1447,28 @@ const PUT_RESOURCES: Array<{ path: string; table: any; allowed: string[] }> = [
 
 for (const r of PUT_RESOURCES) {
   router.put(`/admin/${r.path}/:id`, requireAdmin, async (req, res) => {
-    const data = filterFields(req.body, r.allowed);
-    const [row] = await db
-      .update(r.table)
-      .set(data)
-      .where(eq(r.table.id, Number(req.params.id)))
-      .returning();
-    res.json(row);
+    try {
+      const data = await sanitizeCrudDataForRuntimeSchema(
+        r.path,
+        filterFields(req.body, r.allowed),
+      );
+      const [row] = await db
+        .update(r.table)
+        .set(data)
+        .where(eq(r.table.id, Number(req.params.id)))
+        .returning();
+      await logActivity(
+        { id: req.session.adminId, name: req.session.adminUsername },
+        "update",
+        r.path,
+        { id: row?.id },
+      );
+      res.json(row);
+    } catch (error: any) {
+      console.error(`Update ${r.path} failed:`, error);
+      const httpErr = toHttpError(error);
+      res.status(httpErr.status).json({ error: httpErr.message });
+    }
   });
 }
 
