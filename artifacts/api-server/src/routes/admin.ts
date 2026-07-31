@@ -592,8 +592,20 @@ function makeCrud<T extends { id: any }>(
           .where(eq(ordersTable.productId, id));
 
         if ((orderStats?.count || 0) > 0) {
-          res.status(400).json({
-            error: "لا يمكن حذف هذا المنتج لأنه مرتبط بطلبات شراء سابقة. قم بتعطيله بدلاً من الحذف.",
+          await db
+            .update(productsTable)
+            .set({ available: false, featured: false })
+            .where(eq(productsTable.id, id));
+          await logActivity(
+            { id: req.session.adminId, name: req.session.adminUsername },
+            "archive",
+            path,
+            { id, reason: "product_has_orders" },
+          );
+          res.json({
+            ok: true,
+            archived: true,
+            message: "تم إخفاء المنتج لأنه مرتبط بطلبات شراء سابقة. بقيت الطلبات محفوظة ولن يظهر المنتج في المتجر.",
           });
           return;
         }
@@ -720,6 +732,7 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
 
     if ("categoryId" in normalized) normalizeNumberField(normalized, "categoryId", { required: true });
     if ("priceUsd" in normalized) normalizeDecimalField(normalized, "priceUsd", { required: true });
+    if (isBlank(normalized.priceSyp)) normalized.priceSyp = 0;
     if ("priceSyp" in normalized) normalizeNumberField(normalized, "priceSyp", { required: true });
     if ("basePriceUsd" in normalized) normalizeDecimalField(normalized, "basePriceUsd", { nullable: true });
     if ("providerUnitPrice" in normalized) normalizeDecimalField(normalized, "providerUnitPrice", { nullable: true });
@@ -750,7 +763,6 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
       throw new ValidationError("categoryId is required for manual products");
     }
     if (isBlank(normalized.priceUsd)) throw new ValidationError("priceUsd is required");
-    if (isBlank(normalized.priceSyp)) throw new ValidationError("priceSyp is required");
     if (String(normalized.priceUsd).startsWith("-")) {
       throw new ValidationError("priceUsd must be zero or a positive decimal");
     }
@@ -1564,6 +1576,36 @@ router.post("/admin/bulk-delete", requireAdmin, async (req, res) => {
       for (const id of ids) {
         await db.execute(sql`DELETE FROM products WHERE category_id = ${id}`);
       }
+    } else if (resource === "products") {
+      let deleted = 0;
+      let archived = 0;
+      for (const id of ids) {
+        const [orderStats] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(ordersTable)
+          .where(eq(ordersTable.productId, id));
+
+        if ((orderStats?.count || 0) > 0) {
+          await db
+            .update(productsTable)
+            .set({ available: false, featured: false })
+            .where(eq(productsTable.id, id));
+          archived += 1;
+        } else {
+          await db.delete(autoCodesTable).where(eq(autoCodesTable.productId, id));
+          await db.delete(productsTable).where(eq(productsTable.id, id));
+          deleted += 1;
+        }
+      }
+
+      await logActivity(
+        { id: req.session.adminId, name: req.session.adminUsername },
+        "bulk_delete",
+        resource,
+        { ids, deleted, archived },
+      );
+      res.json({ ok: true, deleted, archived });
+      return;
     } else if (resource === "product-groups") {
       for (const id of ids) {
         await db

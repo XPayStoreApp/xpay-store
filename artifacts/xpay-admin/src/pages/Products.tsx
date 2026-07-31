@@ -197,6 +197,7 @@ export default function Products() {
 
     if (!payload.basePriceUsd) payload.basePriceUsd = payload.providerUnitPrice || null;
     if (!payload.providerUnitPrice) payload.providerUnitPrice = payload.basePriceUsd || null;
+    if (payload.priceSyp == null || payload.priceSyp === "") payload.priceSyp = 0;
 
     return payload;
   };
@@ -286,7 +287,8 @@ export default function Products() {
           label: "سعر الليرة للعرض الداخلي فقط",
           type: "number",
           step: "0.01",
-          required: true,
+          required: false,
+          default: 0,
         },
         {
           name: "productType",

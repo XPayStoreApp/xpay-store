@@ -80,7 +80,7 @@ router.get("/categories", async (_req, res) => {
 router.get("/products", async (req, res) => {
   try {
     const { categoryId, groupId, q } = req.query as { categoryId?: string; groupId?: string; q?: string };
-    const conds = [];
+    const conds = [eq(productsTable.available, true)];
     if (categoryId) conds.push(eq(productsTable.categoryId, Number(categoryId)));
     if (groupId) {
       conds.push(eq(productsTable.groupId, Number(groupId)));
@@ -115,7 +115,10 @@ router.get("/product-groups", async (req, res) => {
         productCount: sql<number>`count(${productsTable.id})::int`,
       })
       .from(productGroupsTable)
-      .leftJoin(productsTable, eq(productsTable.groupId, productGroupsTable.id))
+      .leftJoin(
+        productsTable,
+        and(eq(productsTable.groupId, productGroupsTable.id), eq(productsTable.available, true)),
+      )
       .where(and(...conds))
       .groupBy(productGroupsTable.id)
       .orderBy(asc(productGroupsTable.order), asc(productGroupsTable.id));
@@ -144,7 +147,7 @@ router.get("/products/featured", async (_req, res) => {
       .select({ p: productsTable, cname: categoriesTable.name })
       .from(productsTable)
       .innerJoin(categoriesTable, eq(categoriesTable.id, productsTable.categoryId))
-      .where(eq(productsTable.featured, true));
+      .where(and(eq(productsTable.featured, true), eq(productsTable.available, true)));
     res.json(ListFeaturedProductsResponse.parse(rows.map((r) => productRow(r.p, r.cname))));
   } catch (error) {
     console.error("🔥 FULL ERROR in /products/featured:", error);
@@ -159,7 +162,7 @@ router.get("/products/:id", async (req, res) => {
       .select({ p: productsTable, cname: categoriesTable.name })
       .from(productsTable)
       .innerJoin(categoriesTable, eq(categoriesTable.id, productsTable.categoryId))
-      .where(eq(productsTable.id, id))
+      .where(and(eq(productsTable.id, id), eq(productsTable.available, true)))
       .limit(1);
     if (!rows.length) {
       res.status(404).json({ error: "not_found" });
