@@ -526,6 +526,18 @@ function makeCrud<T extends { id: any }>(
         path === "products"
           ? ((await db.select().from(productsTable).where(eq(productsTable.id, id)).limit(1)) as any[])
           : [];
+      if (path === "products" && before && "minQuantity" in data && data.minQuantity != null) {
+        const providerMinQuantity = Number(before.minQty ?? before.minQuantity ?? 1);
+        if (
+          Number.isFinite(providerMinQuantity) &&
+          providerMinQuantity > 0 &&
+          Number(data.minQuantity) < providerMinQuantity
+        ) {
+          throw new ValidationError(
+            `minQuantity must be greater than or equal to provider minimum (${providerMinQuantity})`,
+          );
+        }
+      }
       const [row] = await db
         .update(table)
         .set(data)
@@ -775,6 +787,14 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
 
     if (normalized.minQty != null && normalized.maxQty != null && normalized.minQty > normalized.maxQty) {
       throw new ValidationError("minQty must be less than or equal to maxQty");
+    }
+
+    if (
+      normalized.minQuantity != null &&
+      normalized.minQty != null &&
+      Number(normalized.minQuantity) < Number(normalized.minQty)
+    ) {
+      throw new ValidationError("minQuantity must be greater than or equal to provider minimum");
     }
 
     const effectiveMinQuantity = Number(normalized.minQuantity ?? normalized.minQty ?? 1);

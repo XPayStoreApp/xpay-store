@@ -190,6 +190,11 @@ export default function Products() {
     }
 
     const min = asNumber(payload.minQuantity ?? payload.minQty ?? 1);
+    const providerMin = asNumber(payload.minQty ?? 1);
+    if (providerMin > 0 && min < providerMin) {
+      throw new Error(`أقل كمية لا يمكن أن تكون أقل من رقم المزود (${providerMin}). يمكنك اختيار رقم مساوي أو أعلى.`);
+    }
+
     const max = payload.maxQuantity ?? payload.maxQty;
     if (max != null && max !== "" && asNumber(max) < min) {
       throw new Error("أعلى كمية يجب أن تكون أكبر من أو تساوي أقل كمية.");
@@ -274,7 +279,8 @@ export default function Products() {
           name: "minQuantity",
           label: "أقل كمية من المزود",
           type: "number",
-          readOnly: true,
+          step: "1",
+          helperText: "يمكنك رفع أقل كمية للعميل، لكن لا يمكن أن تكون أقل من أقل كمية أصلية لدى المزود.",
         },
         {
           name: "maxQuantity",
