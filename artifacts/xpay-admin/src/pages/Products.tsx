@@ -235,7 +235,7 @@ export default function Products() {
           helperText: "اختياري. عند اختيار مجموعة سيظهر المنتج داخلها بدلاً من ظهوره مباشرة في القسم.",
         },
         { name: "name", label: "اسم المنتج", type: "text", required: true },
-        { name: "image", label: "رابط الصورة", type: "text", required: true },
+        { name: "image", label: "رابط الصورة", type: "text", required: true, hideInTable: true },
         {
           name: "providerUnitPrice",
           label: "سعر المزود لكل وحدة",
@@ -289,6 +289,7 @@ export default function Products() {
           step: "0.01",
           required: false,
           default: 0,
+          hideInTable: true,
         },
         {
           name: "productType",
