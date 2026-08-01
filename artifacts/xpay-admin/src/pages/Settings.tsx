@@ -2,19 +2,24 @@ import { useEffect, useState } from "react";
 import { get, put } from "../lib/api";
 import { Save, RefreshCcw } from "lucide-react";
 
-const FIELDS: { key: string; label: string; type?: string }[] = [
+const FIELDS: { key: string; label: string; type?: string; placeholder?: string }[] = [
   { key: "site_name", label: "اسم المتجر" },
-  { key: "site_logo", label: "رابط الشعار" },
+  { key: "site_logo", label: "رابط شعار المتجر" },
   { key: "site_description", label: "وصف المتجر" },
+  { key: "admin_login_image", label: "صورة شاشة تسجيل دخول لوحة التحكم", placeholder: "https://example.com/admin-login.png" },
   { key: "support_email", label: "بريد الدعم" },
   { key: "support_phone", label: "هاتف الدعم" },
-  { key: "telegram_channel", label: "قناة التيليجرام" },
+  { key: "telegram_channel", label: "قناة تيليجرام" },
   { key: "exchange_rate", label: "سعر صرف الدولار (ل.س)", type: "number" },
-  { key: "min_deposit_usd", label: "أقل مبلغ إيداع ($)", type: "number" },
-  { key: "min_deposit_syp", label: "أقل مبلغ إيداع (ل.س)", type: "number" },
+  { key: "min_deposit_usd", label: "أقل مبلغ إيداع بالدولار", type: "number" },
+  { key: "min_deposit_syp", label: "أقل مبلغ إيداع بالليرة", type: "number" },
   { key: "registration_open", label: "السماح بالتسجيل (true/false)" },
   { key: "footer_text", label: "نص التذييل" },
-  { key: "admin_telegram_ids", label: "معرفات مشرفي تيليجرام (CSV)", type: "text" },
+  { key: "admin_telegram_ids", label: "معرفات مشرفي تيليجرام (مفصولة بفاصلة)", type: "text" },
+  { key: "store_popup_enabled", label: "تفعيل الرسالة المنبثقة (true/false)" },
+  { key: "store_popup_message", label: "نص الرسالة المنبثقة" },
+  { key: "store_popup_link_text", label: "نص رابط الرسالة المنبثقة" },
+  { key: "store_popup_link_url", label: "رابط الرسالة المنبثقة" },
 ];
 
 export default function Settings() {
@@ -36,6 +41,8 @@ export default function Settings() {
         const raw = s.value;
         if (Array.isArray(raw)) obj[s.key] = raw.join(",");
         else obj[s.key] = typeof raw === "string" ? raw : "";
+      } else if (typeof s.value === "boolean") {
+        obj[s.key] = String(s.value);
       } else {
         obj[s.key] = typeof s.value === "object" ? JSON.stringify(s.value) : s.value;
       }
@@ -49,23 +56,28 @@ export default function Settings() {
     loadAll().catch((e) => setErr(e.message));
   }, []);
 
+  const normalizeValue = (key: string, value: any) => {
+    if (key === "admin_telegram_ids") {
+      return String(value || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+    }
+    if (["store_popup_enabled", "registration_open"].includes(key)) {
+      const text = String(value ?? "").trim().toLowerCase();
+      if (text === "true") return true;
+      if (text === "false") return false;
+    }
+    return value ?? "";
+  };
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setDone(false);
     setErr(null);
     try {
-      const items = FIELDS.map((f) => {
-        if (f.key === "admin_telegram_ids") {
-          const arr = String(values[f.key] || "")
-            .split(",")
-            .map((x) => x.trim())
-            .filter(Boolean);
-          return { key: f.key, value: arr };
-        }
-        return { key: f.key, value: values[f.key] ?? "" };
-      });
-
+      const items = FIELDS.map((f) => ({ key: f.key, value: normalizeValue(f.key, values[f.key]) }));
       await put("/settings/items", { items });
       await loadAll();
       setDone(true);
@@ -93,11 +105,11 @@ export default function Settings() {
             </button>
           </div>
           <div className="text-xs text-slate-600 space-y-1">
-            <div>Admin Bot Token: {tgStatus?.adminBotTokenConfigured ? "✅" : "❌"}</div>
-            <div>Store Bot Token: {tgStatus?.storeBotTokenConfigured ? "✅" : "❌"}</div>
-            <div>Admin Group ID: {tgStatus?.adminChatIdConfigured ? "✅" : "❌"}</div>
-            <div>Webhook Secret: {tgStatus?.webhookSecretConfigured ? "✅" : "❌"}</div>
-            <div className="break-all">Webhook URL: {tgStatus?.webhookUrl || "غير مضبوط (اضبط PUBLIC_API_BASE_URL)"}</div>
+            <div>Admin Bot Token: {tgStatus?.adminBotTokenConfigured ? "نعم" : "لا"}</div>
+            <div>Store Bot Token: {tgStatus?.storeBotTokenConfigured ? "نعم" : "لا"}</div>
+            <div>Admin Group ID: {tgStatus?.adminChatIdConfigured ? "نعم" : "لا"}</div>
+            <div>Webhook Secret: {tgStatus?.webhookSecretConfigured ? "نعم" : "لا"}</div>
+            <div className="break-all">Webhook URL: {tgStatus?.webhookUrl || "غير مضبوط. اضبط PUBLIC_API_BASE_URL"}</div>
           </div>
         </div>
 
@@ -108,6 +120,7 @@ export default function Settings() {
               type={f.type || "text"}
               value={values[f.key] ?? ""}
               onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+              placeholder={f.placeholder}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
             />
             <div className="text-xs text-slate-400 mt-0.5">{f.key}</div>
@@ -121,7 +134,7 @@ export default function Settings() {
           disabled={saving}
           className="bg-brand-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-brand-700 disabled:opacity-50 flex items-center gap-2"
         >
-          <Save size={16} /> {saving ? "جارٍ الحفظ..." : "حفظ الإعدادات"}
+          <Save size={16} /> {saving ? "جاري الحفظ..." : "حفظ الإعدادات"}
         </button>
       </form>
     </div>

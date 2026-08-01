@@ -1,4 +1,4 @@
-import { useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -28,6 +28,16 @@ type StoreTheme = {
   radius: string;
 };
 
+type AppSettings = {
+  maintenanceMode: boolean;
+  maintenanceTitle: string;
+  maintenanceMessage: string;
+  popupEnabled: boolean;
+  popupMessage: string;
+  popupLinkText: string;
+  popupLinkUrl: string;
+};
+
 const XPAY_BRAND_THEME: StoreTheme = {
   primary: "#58E8FF",
   accent: "#D94CFF",
@@ -35,6 +45,10 @@ const XPAY_BRAND_THEME: StoreTheme = {
   font: "Cairo",
   radius: "16",
 };
+
+function apiBaseUrl() {
+  return (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+}
 
 function hexToHslString(hex: string, fallback: string): string {
   const normalized = String(hex || "").trim().replace(/^#/, "");
@@ -151,6 +165,78 @@ function normalizeRemoteTheme(theme: Partial<StoreTheme> | null | undefined): St
   };
 }
 
+function StoreMaintenance({ settings }: { settings: AppSettings }) {
+  return (
+    <div className="min-h-[100dvh] xpay-shell flex items-center justify-center p-6" dir="rtl">
+      <div className="w-full max-w-md rounded-[2rem] border border-primary/25 bg-card/85 p-8 text-center shadow-2xl backdrop-blur-xl">
+        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 text-3xl">🛠️</div>
+        <h1 className="text-2xl font-extrabold text-foreground">{settings.maintenanceTitle}</h1>
+        <p className="mt-4 text-sm leading-8 text-muted-foreground">{settings.maintenanceMessage}</p>
+      </div>
+    </div>
+  );
+}
+
+function StorePopup({ settings }: { settings: AppSettings }) {
+  const storageKey = `xpay-popup-seen:${settings.popupMessage}:${settings.popupLinkUrl}`;
+  const hasSeenPopup = () => {
+    try {
+      return sessionStorage.getItem(storageKey) === "1";
+    } catch {
+      return false;
+    }
+  };
+  const [open, setOpen] = useState(() => settings.popupEnabled && !hasSeenPopup());
+
+  useEffect(() => {
+    setOpen(settings.popupEnabled && !hasSeenPopup());
+  }, [settings.popupEnabled, storageKey]);
+
+  if (!open || !settings.popupMessage.trim()) return null;
+
+  const close = () => {
+    try {
+      sessionStorage.setItem(storageKey, "1");
+    } catch {
+      // Some Telegram WebViews can block storage; closing should still work.
+    }
+    setOpen(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-5 backdrop-blur-sm" dir="rtl">
+      <div className="w-full max-w-md rounded-2xl border border-amber-400/70 bg-[#12072b]/95 p-6 text-center shadow-2xl shadow-black/40">
+        <div className="border-r-4 border-white pr-4 text-lg font-bold leading-9 text-white whitespace-pre-line">
+          {settings.popupMessage}
+        </div>
+        {settings.popupLinkUrl && settings.popupLinkText && (
+          <a
+            href={settings.popupLinkUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-6 inline-block text-base font-extrabold text-amber-300 underline underline-offset-4"
+          >
+            {settings.popupLinkText}
+          </a>
+        )}
+        <button
+          onClick={close}
+          className="mt-6 w-full rounded-full bg-amber-500 px-5 py-3 font-extrabold text-white shadow-lg shadow-amber-950/30"
+        >
+          موافق
+        </button>
+        <button
+          onClick={close}
+          className="mx-auto mt-5 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500 text-4xl leading-none text-white shadow-lg shadow-amber-950/30"
+          aria-label="إغلاق"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Router() {
   return (
     <AppLayout>
@@ -174,13 +260,13 @@ function Router() {
 }
 
 function App() {
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+
   useLayoutEffect(() => {
     applyTheme(XPAY_BRAND_THEME);
 
-    const baseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
-    const themeUrl = `${baseUrl}/api/theme`;
-
-    fetch(themeUrl)
+    const baseUrl = apiBaseUrl();
+    fetch(`${baseUrl}/api/theme`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`theme_http_${res.status}`);
         return res.json() as Promise<StoreTheme>;
@@ -191,12 +277,33 @@ function App() {
       });
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${apiBaseUrl()}/api/app-settings`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled) setSettings(data);
+      })
+      .catch((error) => {
+        console.error("App settings load failed:", error);
+        if (!cancelled) setSettings(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (settings?.maintenanceMode) {
+    return <StoreMaintenance settings={settings} />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <Router />
         </WouterRouter>
+        {settings && <StorePopup settings={settings} />}
         <Toaster theme="dark" position="top-center" dir="rtl" />
       </TooltipProvider>
     </QueryClientProvider>

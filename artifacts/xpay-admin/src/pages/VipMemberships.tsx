@@ -1,4 +1,5 @@
 import Crud from "../components/Crud";
+
 export default function VipMemberships() {
   return (
     <Crud

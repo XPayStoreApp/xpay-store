@@ -52,4 +52,31 @@ router.get("/theme", async (_req, res) => {
   });
 });
 
+router.get("/app-settings", async (_req, res) => {
+  const rows = await db.select().from(settingsTable);
+  const map = new Map(rows.map((row) => [row.key, row.value]));
+
+  const getBool = (key: string, fallback = false) => {
+    const value = map.get(key);
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") return value === "true";
+    return fallback;
+  };
+
+  const defaultMaintenanceTitle = "الموقع قيد الصيانة المؤقتة";
+  const defaultMaintenanceMessage =
+    "نعمل حاليًّا على تنفيذ مجموعة من أعمال الصيانة والتحديث لتحسين أداء الموقع، وتعزيز مستوى الأمان، وتطوير تجربة المستخدم بشكل أفضل. نعتذر عن أي إزعاج قد يسببه ذلك، ونرجو منكم التفضل بالعودة لاحقًا.";
+
+  res.json({
+    maintenanceMode: getBool("maintenance_mode"),
+    maintenanceTitle: String(map.get("maintenance_title") || defaultMaintenanceTitle),
+    maintenanceMessage: String(map.get("maintenance_message") || defaultMaintenanceMessage),
+    popupEnabled: getBool("store_popup_enabled"),
+    popupMessage: String(map.get("store_popup_message") || ""),
+    popupLinkText: String(map.get("store_popup_link_text") || ""),
+    popupLinkUrl: String(map.get("store_popup_link_url") || ""),
+    adminLoginImage: String(map.get("admin_login_image") || ""),
+  });
+});
+
 export default router;

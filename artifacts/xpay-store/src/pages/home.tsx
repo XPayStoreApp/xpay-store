@@ -185,7 +185,7 @@ export default function Home() {
                 <BellRing className="w-4 h-4" />
               </div>
               <div className="overflow-hidden flex-1 relative h-5">
-                <div className="animate-[marquee_15s_linear_infinite] whitespace-nowrap absolute right-0 flex items-center h-full">
+                <div className="news-marquee whitespace-nowrap absolute right-0 flex items-center h-full">
                   {news.map((item) => (
                     <span key={item.id} className="text-xs text-muted-foreground mr-8">
                       {item.content}

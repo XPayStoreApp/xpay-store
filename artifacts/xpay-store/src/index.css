@@ -229,6 +229,24 @@
   border-color: hsl(var(--primary) / 0.18);
 }
 
+@keyframes xpay-news-marquee {
+  0% {
+    transform: translateX(-10%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.news-marquee {
+  animation: xpay-news-marquee 18s linear infinite;
+  will-change: transform;
+}
+
+.news-marquee:hover {
+  animation-play-state: paused;
+}
+
 @media (max-width: 640px) {
   html,
   body,

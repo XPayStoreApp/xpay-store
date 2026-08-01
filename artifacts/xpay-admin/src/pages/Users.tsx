@@ -94,39 +94,27 @@ export default function Users() {
                     <td className="px-4 py-3">{Number(u.balanceSyp).toFixed(0)}</td>
                     <td className="px-4 py-3">
                       {u.vipLevel > 0 ? (
-                        <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded">
-                          VIP {u.vipLevel}
-                        </span>
+                        <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded">VIP {u.vipLevel}</span>
                       ) : (
                         <span className="text-slate-400">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       {u.banned ? (
-                        <span className="bg-rose-100 text-rose-700 text-xs font-semibold px-2 py-0.5 rounded">
-                          محظور
-                        </span>
+                        <span className="bg-rose-100 text-rose-700 text-xs font-semibold px-2 py-0.5 rounded">محظور</span>
                       ) : (
-                        <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded">
-                          نشط
-                        </span>
+                        <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded">نشط</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setEdit(u)}
-                          className="p-1.5 text-brand-600 hover:bg-brand-50 rounded"
-                          title="تعديل الرصيد"
-                        >
+                        <button onClick={() => setEdit(u)} className="p-1.5 text-brand-600 hover:bg-brand-50 rounded" title="تعديل الرصيد وVIP">
                           <Wallet size={15} />
                         </button>
                         <button
                           disabled={busy === u.id}
                           onClick={() => toggleBan(u)}
-                          className={`p-1.5 rounded disabled:opacity-50 ${
-                            u.banned ? "text-emerald-600 hover:bg-emerald-50" : "text-rose-600 hover:bg-rose-50"
-                          }`}
+                          className={`p-1.5 rounded disabled:opacity-50 ${u.banned ? "text-emerald-600 hover:bg-emerald-50" : "text-rose-600 hover:bg-rose-50"}`}
                           title={u.banned ? "إلغاء الحظر" : "حظر"}
                         >
                           {u.banned ? <CheckCircle2 size={15} /> : <Ban size={15} />}
@@ -150,6 +138,7 @@ function BalanceModal({ user, onClose, onDone }: { user: UserRow; onClose: () =>
   const [currency, setCurrency] = useState<"USD" | "SYP">("USD");
   const [operation, setOperation] = useState<"add" | "sub">("add");
   const [amount, setAmount] = useState("");
+  const [vipLevel, setVipLevel] = useState(String(user.vipLevel || 0));
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -159,11 +148,17 @@ function BalanceModal({ user, onClose, onDone }: { user: UserRow; onClose: () =>
     setBusy(true);
     setErr(null);
     try {
-      const parsedAmount = Number(amount);
-      await post(`/users/${user.id}/balance`, { currency, operation, amount: parsedAmount, note });
+      const parsedAmount = Number(amount || 0);
+      if (parsedAmount > 0) {
+        await post(`/users/${user.id}/balance`, { currency, operation, amount: parsedAmount, note });
+      }
+      const nextVip = Math.max(0, Math.trunc(Number(vipLevel || 0)));
+      if (nextVip !== Number(user.vipLevel || 0)) {
+        await patch(`/users/${user.id}`, { vipLevel: nextVip });
+      }
       onDone();
     } catch (e: any) {
-      setErr(e.message || "تعذر تعديل الرصيد");
+      setErr(e.message || "تعذر تعديل بيانات المستخدم");
     } finally {
       setBusy(false);
     }
@@ -173,55 +168,42 @@ function BalanceModal({ user, onClose, onDone }: { user: UserRow; onClose: () =>
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
-          <h2 className="text-lg font-bold">تعديل رصيد {user.username}</h2>
-          <button onClick={onClose} className="text-slate-400" type="button">
-            <XIcon size={20} />
-          </button>
+          <h2 className="text-lg font-bold">تعديل بيانات {user.username}</h2>
+          <button onClick={onClose} className="text-slate-400" type="button"><XIcon size={20} /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">العملة</label>
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value as "USD" | "SYP")}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-              >
+              <select value={currency} onChange={(e) => setCurrency(e.target.value as "USD" | "SYP")} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
                 <option value="USD">دولار</option>
                 <option value="SYP">ليرة سورية</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">العملية</label>
-              <select
-                value={operation}
-                onChange={(e) => setOperation(e.target.value as "add" | "sub")}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-              >
+              <select value={operation} onChange={(e) => setOperation(e.target.value as "add" | "sub")} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
                 <option value="add">إضافة</option>
                 <option value="sub">خصم</option>
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">المبلغ</label>
-            <input
-              type="number"
-              step="0.000001"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              required
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-            />
+            <label className="block text-sm font-semibold text-slate-700 mb-1">المبلغ، اتركه 0 إذا أردت تعديل VIP فقط</label>
+            <input type="number" step="0.000001" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">ملاحظة (اختياري)</label>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">مستوى VIP</label>
+            <input type="number" step="1" min="0" value={vipLevel} onChange={(e) => setVipLevel(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            <p className="text-xs text-slate-500 mt-1">0 يعني مستخدم عادي. أي رقم أعلى يرفع المستخدم إلى عضوية VIP.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">ملاحظة اختيارية</label>
             <input value={note} onChange={(e) => setNote(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
           </div>
           {err && <div className="p-3 bg-rose-50 text-rose-700 rounded-lg text-sm">{err}</div>}
           <button disabled={busy} className="w-full bg-brand-600 text-white py-2.5 rounded-lg font-semibold hover:bg-brand-700 disabled:opacity-50">
-            {busy ? "جارٍ التنفيذ..." : "تنفيذ"}
+            {busy ? "جاري التنفيذ..." : "تنفيذ"}
           </button>
         </form>
       </div>
