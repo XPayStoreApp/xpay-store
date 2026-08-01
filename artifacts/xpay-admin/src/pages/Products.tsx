@@ -240,6 +240,14 @@ export default function Products() {
           helperText: "اختياري. عند اختيار مجموعة سيظهر المنتج داخلها بدلاً من ظهوره مباشرة في القسم.",
         },
         { name: "name", label: "اسم المنتج", type: "text", required: true },
+        {
+          name: "order",
+          label: "ترتيب المنتج",
+          type: "number",
+          step: "1",
+          default: 0,
+          helperText: "اكتب رقماً لتحديد مكان المنتج داخل القسم أو المجموعة. الرقم الأقل يظهر أولاً.",
+        },
         { name: "image", label: "رابط الصورة", type: "text", required: true, hideInTable: true },
         {
           name: "providerId",

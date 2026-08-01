@@ -52,6 +52,7 @@ export interface Product {
   groupId?: string;
   categoryName: string;
   image: string;
+  order: number;
   priceUsd: number;
   minTotalUsd?: number;
   priceSyp: number;

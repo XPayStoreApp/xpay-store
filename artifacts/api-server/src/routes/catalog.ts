@@ -34,6 +34,7 @@ function productRow(p: typeof productsTable.$inferSelect, categoryName: string) 
     groupId: p.groupId != null ? String(p.groupId) : undefined,
     categoryName,
     image: p.image,
+    order: p.order,
     priceUsd: finalPriceUsd,
     minTotalUsd: Number((finalPriceUsd * safeMinQty).toFixed(8)),
     priceSyp: Number(p.priceSyp),
@@ -95,7 +96,8 @@ router.get("/products", async (req, res) => {
       })
       .from(productsTable)
       .innerJoin(categoriesTable, eq(categoriesTable.id, productsTable.categoryId))
-      .where(conds.length ? and(...conds) : undefined);
+      .where(conds.length ? and(...conds) : undefined)
+      .orderBy(asc(productsTable.order), asc(productsTable.id));
     res.json(ListProductsResponse.parse(rows.map((r) => productRow(r.p, r.cname))));
   } catch (error) {
     console.error("🔥 FULL ERROR in /products:", error);
@@ -147,7 +149,8 @@ router.get("/products/featured", async (_req, res) => {
       .select({ p: productsTable, cname: categoriesTable.name })
       .from(productsTable)
       .innerJoin(categoriesTable, eq(categoriesTable.id, productsTable.categoryId))
-      .where(and(eq(productsTable.featured, true), eq(productsTable.available, true)));
+      .where(and(eq(productsTable.featured, true), eq(productsTable.available, true)))
+      .orderBy(asc(productsTable.order), asc(productsTable.id));
     res.json(ListFeaturedProductsResponse.parse(rows.map((r) => productRow(r.p, r.cname))));
   } catch (error) {
     console.error("🔥 FULL ERROR in /products/featured:", error);

@@ -768,6 +768,7 @@ async function sanitizeCrudDataForRuntimeSchema(path: string, data: any): Promis
 
     if ("available" in normalized) normalized.available = !!normalized.available;
     if ("featured" in normalized) normalized.featured = !!normalized.featured;
+    if ("order" in normalized) normalizeNumberField(normalized, "order", { required: true });
 
     if (isBlank(normalized.name)) throw new ValidationError("name is required");
     if (isBlank(normalized.image)) throw new ValidationError("image is required");
@@ -907,11 +908,13 @@ makeCrud("product-groups", productGroupsTable, {
 });
 
 makeCrud("products", productsTable, {
+  orderBy: productsTable.order,
   allowedFields: [
     "categoryId",
     "groupId",
     "name",
     "image",
+    "order",
     "priceUsd",
     "priceSyp",
     "basePriceUsd",
@@ -1482,6 +1485,7 @@ const PUT_RESOURCES: Array<{ path: string; table: any; allowed: string[] }> = [
     table: productsTable,
     allowed: [
       "categoryId", "groupId", "name", "image", "priceUsd", "priceSyp", "basePriceUsd",
+      "order",
       "providerUnitPrice", "storeProfitPerUnit", "finalUnitPrice",
       "productType", "available", "minQty", "maxQty", "minQuantity", "maxQuantity",
       "quantityType", "quantityValues", "description", "featured",

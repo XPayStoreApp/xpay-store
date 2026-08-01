@@ -59,6 +59,7 @@ export const productsTable = pgTable("products", {
   finalUnitPrice: numeric("final_unit_price", { precision: 16, scale: 8 }),
   productType: text("product_type").notNull().default("package"),
   available: boolean("available").notNull().default(true),
+  order: integer("order").notNull().default(0),
   minQty: numeric("min_qty", { precision: 14, scale: 2 }),
   maxQty: numeric("max_qty", { precision: 14, scale: 2 }),
   minQuantity: integer("min_quantity"),
